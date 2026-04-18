@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sinclair AI — Heatseeker Live</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#080a0e;--bg1:#0e1117;--bg2:#141820;--bg3:#1a1f2a;--bg4:#212736;
+  --border:#232836;--border2:#2e3645;--border3:#3a4255;
+  --t1:#dde1ec;--t2:#8b93a8;--t3:#525c72;--t4:#353d50;
+  --yellow:#f5c540;--ydim:rgba(245,197,64,.11);
+  --purple:#9c6ef0;--pdim:rgba(156,110,240,.11);
+  --green:#36d68a;--red:#ef5350;--blue:#4d9ef5;--orange:#f09a38;
+  --mono:'JetBrains Mono',monospace;--sans:'DM Sans','Helvetica Neue',sans-serif;
+}
+html,body{height:100%;background:var(--bg0);color:var(--t1);font-family:var(--sans);font-size:15px;overflow:hidden}
+
+/* TOP BAR */
+.topbar{height:56px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:14px;flex-shrink:0}
+.logo{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.14em;color:var(--yellow);white-space:nowrap}
+.logo em{color:var(--t4);font-style:normal;font-weight:400}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .3s}
+.dot.live{background:var(--green);animation:blink 2s ease-in-out infinite}
+.dot.loading{background:var(--orange);animation:blink .5s ease-in-out infinite}
+.dot.error{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.conn-lbl{font-family:var(--mono);font-size:11px;color:var(--t3);white-space:nowrap}
+.ticker-strip{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;flex:1}
+.ticker-strip::-webkit-scrollbar{display:none}
+.ttab{background:none;border:none;cursor:pointer;padding:7px 14px;border-radius:5px;font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:.05em;color:var(--t3);transition:color .12s,background .12s;white-space:nowrap}
+.ttab:hover{background:var(--bg3);color:var(--t2)}
+.ttab.on{background:var(--bg3);color:var(--yellow);position:relative}
+.ttab.on::after{content:'';position:absolute;bottom:0;left:10px;right:10px;height:2px;background:var(--yellow);border-radius:2px}
+.sep{width:1px;height:22px;background:var(--border);flex-shrink:0}
+.mode-grp{display:flex;gap:4px}
+.mbtn{background:none;border:1px solid var(--border);cursor:pointer;padding:6px 13px;border-radius:5px;font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.08em;color:var(--t3);transition:all .12s}
+.mbtn:hover{border-color:var(--border3);color:var(--t2)}
+.mbtn.on{background:var(--bg3);border-color:var(--purple);color:var(--purple)}
+.ts-lbl{font-family:var(--mono);font-size:11px;color:var(--t4);white-space:nowrap;margin-left:4px}
+.refresh-btn{background:none;border:1px solid var(--border);cursor:pointer;padding:6px 12px;border-radius:5px;font-family:var(--mono);font-size:11px;color:var(--t3);transition:all .12s;white-space:nowrap}
+.refresh-btn:hover{border-color:var(--border3);color:var(--t2)}
+
+/* BODY */
+.body{display:flex;height:calc(100vh - 56px);overflow:hidden}
+.sidebar{width:260px;flex-shrink:0;background:var(--bg1);border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.chart-wrap{flex:1;position:relative;background:var(--bg0);overflow:hidden;display:flex;flex-direction:column}
+.chart-split{flex:1;display:flex;min-height:0}
+.chart-price{flex:1.4;position:relative;border-right:1px solid var(--border);min-width:0}
+.chart-price-hdr{position:absolute;top:10px;left:14px;z-index:5;font-family:var(--mono);font-size:11px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;pointer-events:none}
+.chart-price-hdr .sym{color:var(--t1);font-weight:600;margin-right:8px}
+.chart-gex{flex:1;position:relative;min-width:0}
+.chart-gex-hdr{position:absolute;top:10px;left:14px;z-index:5;font-family:var(--mono);font-size:11px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;pointer-events:none}
+.right-panel{width:220px;flex-shrink:0;background:var(--bg1);border-left:1px solid var(--border);padding:14px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+
+/* SIDEBAR */
+.slabel{font-size:10.5px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--t3);margin-bottom:7px;font-weight:500}
+.scard{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:12px 14px}
+.sv{font-family:var(--mono);font-size:26px;font-weight:600;line-height:1.1;letter-spacing:-.01em}
+.sv.g{color:var(--green)}.sv.r{color:var(--red)}.sv.y{color:var(--yellow)}.sv.p{color:var(--purple)}.sv.o{color:var(--orange)}
+.sl{font-size:12px;color:var(--t2);margin-top:5px;font-family:var(--mono)}
+.lrow{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:5px}
+.ldot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.lname{font-size:12.5px;color:var(--t2);flex:1;letter-spacing:.01em}
+.lprice{font-family:var(--mono);font-size:13.5px;color:var(--t1);font-weight:500}
+.lnote{font-size:10.5px;color:var(--t4)}
+.regime{display:inline-flex;align-items:center;gap:7px;border:1px solid;border-radius:5px;padding:6px 12px;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.08em}
+.conf-row{display:flex;align-items:center;gap:8px;padding:5px 0}
+.conf-dot{width:10px;height:10px;border-radius:50%}
+.conf-lbl{font-size:12px;color:var(--t2)}
+.greek-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border)}
+.greek-row:last-child{border-bottom:none}
+.greek-name{font-family:var(--mono);font-size:11px;color:var(--t3);letter-spacing:.08em;font-weight:500}
+.greek-val{font-family:var(--mono);font-size:13px;font-weight:500}
+.legend-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);padding:3px 0}
+.lswatch{width:11px;height:11px;border-radius:2px;flex-shrink:0}
+
+/* CHART OVERLAYS */
+#hm{display:block}
+.price-tag{position:absolute;right:0;background:var(--green);color:#000;font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:2px 0 0 2px;pointer-events:none;white-space:nowrap;z-index:5}
+.king-tag{position:absolute;background:var(--yellow);color:#000;font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 6px;border-radius:2px;letter-spacing:.06em;pointer-events:none;white-space:nowrap;z-index:5}
+.hover-panel{position:absolute;left:80px;background:rgba(14,17,23,.97);border:1px solid var(--border3);border-radius:6px;padding:9px 12px;font-family:var(--mono);font-size:10px;line-height:1.8;pointer-events:none;z-index:10;display:none;min-width:180px}
+.xhair{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.09);pointer-events:none;display:none;z-index:4}
+
+/* LOADING OVERLAY */
+.loading-overlay{position:absolute;inset:0;background:rgba(8,10,14,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;gap:12px}
+.spinner{width:24px;height:24px;border:2px solid var(--border2);border-top-color:var(--yellow);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-family:var(--mono);font-size:11px;color:var(--t2);letter-spacing:.06em}
+
+/* RIGHT PANEL */
+.mticker{background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:7px 9px;cursor:pointer;transition:all .12s;margin-bottom:3px}
+.mticker:hover{background:var(--bg3);border-color:var(--border2)}
+.mticker.on{border-color:var(--yellow);background:var(--bg3)}
+.msym{font-family:var(--mono);font-size:11px;font-weight:600}
+.mprice{font-family:var(--mono);font-size:10px;color:var(--t2)}
+.mbar{height:3px;background:var(--bg0);border-radius:2px;margin-top:5px;overflow:hidden}
+.mbar-fill{height:100%;border-radius:2px;transition:width .5s}
+.mbias{font-size:9px;margin-top:3px;font-family:var(--mono);letter-spacing:.04em}
+.mchg{font-size:9px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">Sinclair <em>/ Heatseeker Live</em></div>
+  <div class="dot" id="conn-dot"></div>
+  <div class="conn-lbl" id="conn-lbl">connecting...</div>
+  <div class="sep"></div>
+  <div class="ticker-strip" id="tabs"></div>
+  <div class="sep"></div>
+  <div class="mode-grp">
+    <button class="mbtn on"  onclick="setMode('gex',this)">GEX</button>
+    <button class="mbtn"     onclick="setMode('vex',this)">VEX</button>
+    <button class="mbtn"     onclick="setMode('oi', this)">OI</button>
+  </div>
+  <button class="refresh-btn" onclick="forceRefresh()">↺ refresh</button>
+  <div class="ts-lbl" id="tslbl"></div>
+</div>
+
+<div class="body">
+  <div class="sidebar">
+    <div>
+      <div class="slabel">Spot price</div>
+      <div class="scard">
+        <div class="sv" id="sb-spot">—</div>
+        <div class="sl" id="sb-chg">—</div>
+      </div>
+    </div>
+    <div>
+      <div class="slabel">Key levels</div>
+      <div id="lvl-list"></div>
+    </div>
+    <div>
+      <div class="slabel">Regime</div>
+      <div id="regime-el"></div>
+    </div>
+    <div>
+      <div class="slabel">Dealer exposure (GEX/VEX/CEX)</div>
+      <div class="scard">
+        <div id="greek-rows"></div>
+      </div>
+    </div>
+    <div>
+      <div class="slabel">Confluence</div>
+      <div id="conf-el"></div>
+    </div>
+    <div>
+      <div class="slabel">Expirations loaded</div>
+      <div id="exp-list" style="font-family:var(--mono);font-size:9px;color:var(--t3);line-height:1.8"></div>
+    </div>
+    <div>
+      <div class="slabel">Scenario</div>
+      <div id="scenario-el"></div>
+    </div>
+    <div>
+      <div class="slabel">Legend</div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div class="legend-row"><div class="lswatch" style="background:var(--yellow)"></div> Absorbing / Pika (+GEX)</div>
+        <div class="legend-row"><div class="lswatch" style="background:var(--purple)"></div> Amplifying / Barney (−GEX)</div>
+        <div class="legend-row"><div class="lswatch" style="background:var(--green);opacity:.7"></div> Current price</div>
+        <div class="legend-row"><div class="lswatch" style="background:var(--blue);opacity:.7"></div> Gamma flip</div>
+        <div class="legend-row" style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px"><span style="color:var(--yellow);font-family:var(--mono);font-size:9px">★ KING</span><span style="margin-left:6px;font-size:10px;color:var(--t2)">Highest |GEX|, EOW pin</span></div>
+        <div class="legend-row"><span style="color:var(--purple);font-family:var(--mono);font-size:9px">⬡ GATE</span><span style="margin-left:6px;font-size:10px;color:var(--t2)">Blocks path to King</span></div>
+        <div class="legend-row"><span style="color:var(--red);font-family:var(--mono);font-size:9px">⚡ VELOCITY</span><span style="margin-left:6px;font-size:10px;color:var(--t2)">Gradient spike, fast moves</span></div>
+        <div class="legend-row"><span style="color:var(--orange);font-family:var(--mono);font-size:9px">◈ STACK</span><span style="margin-left:6px;font-size:10px;color:var(--t2)">Cross-expiry OI stacked</span></div>
+        <div class="legend-row"><span style="color:var(--blue);font-family:var(--mono);font-size:9px">▬ CLUSTER</span><span style="margin-left:6px;font-size:10px;color:var(--t2)">Consecutive same-sign run</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-wrap" id="cw">
+    <div class="chart-split">
+      <div class="chart-price" id="priceWrap">
+        <div class="chart-price-hdr"><span class="sym" id="priceHdrSym">SPY</span>Daily · 60d · horizontal lines = gamma levels</div>
+        <div id="priceChart" style="position:absolute;inset:0"></div>
+      </div>
+      <div class="chart-gex" id="gexWrap">
+        <div class="chart-gex-hdr">GEX per strike</div>
+        <canvas id="hm"></canvas>
+        <div class="price-tag" id="ptag" style="display:none"></div>
+        <div class="king-tag" id="ktag" style="display:none">★ KING NODE</div>
+        <div class="hover-panel" id="hp"></div>
+        <div class="xhair" id="xh"></div>
+      </div>
+    </div>
+    <div class="loading-overlay" id="loader">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loader-text">FETCHING DATA...</div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="slabel" style="margin-bottom:8px">All tickers</div>
+    <div id="mlist"></div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════
+   CONFIG
+   ════════════════════════════════════════════ */
+const API = 'http://localhost:5050/api';
+
+const BAKED_SPY = {"chg_dollar":8.48,"chg_pct":1.21,"error":null,"expirations":[{"dte":3,"expiry":"2026-04-22","weight":11.03},{"dte":4,"expiry":"2026-04-23","weight":9.552},{"dte":5,"expiry":"2026-04-24","weight":8.544},{"dte":11,"expiry":"2026-04-30","weight":5.76},{"dte":12,"expiry":"2026-05-01","weight":5.515}],"fetched_at":"2026-04-18T17:07:18.346996","levels":{"call_wall":715.0,"cex_bias":"TIME_HEADWIND","confluence":1,"gamma_flip":631.0,"max_pain":555.0,"net_cex_k":-3083214.86,"net_gex_m":2477028.08,"net_vex_m":136.8,"put_wall":660.0,"regime":"DAMPENED","vex_bias":"IV_TAILWIND"},"nodes":[{"call_oi":714,"cex":-205653.35,"cluster_id":null,"gex":6171569.92,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":714,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":865.0,"vex":12176.11},{"call_oi":342,"cex":-104710.29,"cluster_id":null,"gex":3242993.07,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":342,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":860.0,"vex":6207.71},{"call_oi":339,"cex":-119553.28,"cluster_id":null,"gex":3865166.75,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":339,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":850.0,"vex":6941.33},{"call_oi":4824,"cex":-1658880.12,"cluster_id":null,"gex":59827487.96,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":4824,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":835.0,"vex":96618.22},{"call_oi":11594,"cex":-4317413.8,"cluster_id":null,"gex":163028431.15,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":11594,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":830.0,"vex":253385.36},{"call_oi":7061,"cex":-3902875.61,"cluster_id":null,"gex":146979013.99,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":7061,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":825.0,"vex":219552.43},{"call_oi":5890,"cex":-2565635.58,"cluster_id":null,"gex":107963512.32,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5890,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":820.0,"vex":154554.6},{"call_oi":5674,"cex":-4124733.86,"cluster_id":null,"gex":177497369.62,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5674,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":815.0,"vex":243311.13},{"call_oi":6234,"cex":-4585403.32,"cluster_id":null,"gex":193281908.83,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":6234,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":810.0,"vex":252982.16},{"call_oi":18914,"cex":-11060284.01,"cluster_id":null,"gex":305161956.94,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":18914,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":805.0,"vex":381356.62},{"call_oi":15236,"cex":-12248943.36,"cluster_id":null,"gex":601246098.19,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":15236,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":800.0,"vex":711181.27},{"call_oi":11119,"cex":-9088719.64,"cluster_id":null,"gex":430868483.87,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":11119,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":795.0,"vex":482613.88},{"call_oi":6733,"cex":-5627400.11,"cluster_id":null,"gex":263920954.73,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":6733,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":790.0,"vex":278920.33},{"call_oi":5130,"cex":-3807849.77,"cluster_id":null,"gex":129481716.89,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5130,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":785.0,"vex":128953.35},{"call_oi":7573,"cex":-6986416.6,"cluster_id":null,"gex":328993260.69,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":7573,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":780.0,"vex":305705.72},{"call_oi":2398,"cex":-3102609.78,"cluster_id":null,"gex":184143243.49,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2398,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":775.0,"vex":158996.17},{"call_oi":3171,"cex":-5929576.31,"cluster_id":null,"gex":426173652.4,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3171,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":770.0,"vex":339878.95},{"call_oi":3756,"cex":-6729522.83,"cluster_id":null,"gex":492252243.19,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3756,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":765.0,"vex":360451.02},{"call_oi":2107,"cex":null,"cluster_id":null,"gex":null,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":0,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":760.0,"vex":null},{"call_oi":2658,"cex":null,"cluster_id":null,"gex":null,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":0,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":755.0,"vex":null},{"call_oi":8716,"cex":null,"cluster_id":null,"gex":null,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":true,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":0,"node_type":"KING","put_oi":0,"strength":5,"strike":750.0,"vex":null},{"call_oi":2377,"cex":-11307096.64,"cluster_id":null,"gex":1236334955.6,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2377,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":749.0,"vex":642028.66},{"call_oi":7898,"cex":-41006050.09,"cluster_id":null,"gex":4595271385.44,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":7898,"node_type":"VELOCITY","put_oi":0,"strength":1,"strike":748.0,"vex":2324800.65},{"call_oi":1038,"cex":-5785644.55,"cluster_id":null,"gex":664955383.73,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1038,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":747.0,"vex":327481.64},{"call_oi":646,"cex":-3892795.36,"cluster_id":null,"gex":459167909.96,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":646,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":746.0,"vex":219966.03},{"call_oi":5732,"cex":-35740793.0,"cluster_id":null,"gex":4301605800.36,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":5738,"node_type":"VELOCITY","put_oi":6,"strength":1,"strike":745.0,"vex":2002647.91},{"call_oi":1256,"cex":-8878620.21,"cluster_id":null,"gex":1105478678.32,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1256,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":744.0,"vex":499834.97},{"call_oi":6744,"cex":-52002122.21,"cluster_id":null,"gex":6660088807.4,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":6744,"node_type":"VELOCITY","put_oi":0,"strength":1,"strike":743.0,"vex":2921616.58},{"call_oi":787,"cex":-6524853.47,"cluster_id":null,"gex":860347589.23,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":787,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":742.0,"vex":365794.86},{"call_oi":580,"cex":-5162887.27,"cluster_id":null,"gex":701514663.35,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":580,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":741.0,"vex":288777.7},{"call_oi":5548,"cex":-49190664.1,"cluster_id":null,"gex":6726823677.14,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":5548,"node_type":"VELOCITY","put_oi":0,"strength":1,"strike":740.0,"vex":2678192.57},{"call_oi":1651,"cex":-17466594.22,"cluster_id":null,"gex":2527306160.2,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1651,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":739.0,"vex":972045.71},{"call_oi":1150,"cex":-13290698.35,"cluster_id":null,"gex":1987604648.04,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1150,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":738.0,"vex":737588.75},{"call_oi":1456,"cex":-18155863.38,"cluster_id":null,"gex":2809676681.52,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1456,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":737.0,"vex":1004570.31},{"call_oi":540,"cex":-7235988.0,"cluster_id":null,"gex":1160210791.35,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":540,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":736.0,"vex":399078.57},{"call_oi":4603,"cex":-55529663.44,"cluster_id":null,"gex":8159038133.51,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":4605,"node_type":"VELOCITY","put_oi":2,"strength":1,"strike":735.0,"vex":2701572.97},{"call_oi":1105,"cex":-16824802.59,"cluster_id":null,"gex":2907955550.55,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1105,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":734.0,"vex":921202.45},{"call_oi":947,"cex":-15232402.03,"cluster_id":null,"gex":2739691268.09,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":947,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":733.0,"vex":830597.38},{"call_oi":1074,"cex":-18162237.22,"cluster_id":null,"gex":3405037969.66,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1074,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":732.0,"vex":985935.55},{"call_oi":2504,"cex":-44115945.95,"cluster_id":null,"gex":8637409377.33,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":2504,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":731.0,"vex":2383119.5},{"call_oi":9020,"cex":-154954407.46,"cluster_id":null,"gex":19012128899.34,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":9021,"node_type":"STANDARD","put_oi":1,"strength":1,"strike":730.0,"vex":5054938.51},{"call_oi":1308,"cex":-24479079.09,"cluster_id":null,"gex":5259444353.71,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":1308,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":729.0,"vex":1307437.31},{"call_oi":928,"cex":-17671854.58,"cluster_id":null,"gex":3991520117.48,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":928,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":728.0,"vex":937642.95},{"call_oi":2311,"cex":-44379870.78,"cluster_id":null,"gex":10566821872.19,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":2311,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":727.0,"vex":2337391.82},{"call_oi":841,"cex":-16103115.1,"cluster_id":null,"gex":4053727529.77,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":843,"node_type":"STANDARD","put_oi":2,"strength":1,"strike":726.0,"vex":841101.56},{"call_oi":20559,"cex":-760683185.17,"cluster_id":null,"gex":107537835981.43,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":20604,"node_type":"VELOCITY","put_oi":45,"strength":1,"strike":725.0,"vex":21392727.21},{"call_oi":649,"cex":-12068244.85,"cluster_id":null,"gex":3432066002.64,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":651,"node_type":"STANDARD","put_oi":2,"strength":1,"strike":724.0,"vex":617763.01},{"call_oi":19546,"cex":-354011545.27,"cluster_id":null,"gex":107668007740.1,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":19546,"node_type":"VELOCITY","put_oi":0,"strength":1,"strike":723.0,"vex":17898205.55},{"call_oi":412,"cex":-7177703.25,"cluster_id":null,"gex":2346246736.17,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":412,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":722.0,"vex":357677.35},{"call_oi":2009,"cex":-33290188.85,"cluster_id":null,"gex":11762243584.78,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":2009,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":721.0,"vex":1630784.64},{"call_oi":23890,"cex":-1399506600.03,"cluster_id":null,"gex":245831961912.51,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":23899,"node_type":"VELOCITY","put_oi":9,"strength":1,"strike":720.0,"vex":32259082.95},{"call_oi":2545,"cex":-95220224.91,"cluster_id":null,"gex":23473599518.84,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":2569,"node_type":"STANDARD","put_oi":24,"strength":1,"strike":719.0,"vex":2713789.69},{"call_oi":2057,"cex":-64420771.72,"cluster_id":null,"gex":18579980761.44,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":2077,"node_type":"STANDARD","put_oi":20,"strength":1,"strike":718.0,"vex":1880567.24},{"call_oi":3775,"cex":-89739773.25,"cluster_id":null,"gex":31765079642.21,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":3812,"node_type":"STANDARD","put_oi":37,"strength":1,"strike":717.0,"vex":2746573.52},{"call_oi":2920,"cex":-91116033.11,"cluster_id":null,"gex":31600944172.47,"is_call_wall":true,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":2920,"node_type":"STANDARD","put_oi":0,"strength":1,"strike":716.0,"vex":2347523.71},{"call_oi":23943,"cex":-1203830981.37,"cluster_id":null,"gex":353041261426.97,"is_call_wall":true,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":23960,"node_type":"VELOCITY","put_oi":17,"strength":1,"strike":715.0,"vex":21954927.93},{"call_oi":3338,"cex":-79534372.29,"cluster_id":null,"gex":38493758491.05,"is_call_wall":true,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":true,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":3363,"node_type":"GATEKEEPER","put_oi":25,"strength":1,"strike":714.0,"vex":1798267.17},{"call_oi":3826,"cex":-47557204.77,"cluster_id":null,"gex":33796231704.21,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":3868,"node_type":"STANDARD","put_oi":42,"strength":1,"strike":713.0,"vex":1046657.84},{"call_oi":5994,"cex":-56702635.73,"cluster_id":null,"gex":54343027112.19,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":true,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":5994,"node_type":"GATEKEEPER","put_oi":0,"strength":1,"strike":712.0,"vex":932480.41},{"call_oi":3399,"cex":-18245534.14,"cluster_id":null,"gex":28659039202.4,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":3434,"node_type":"STANDARD","put_oi":35,"strength":1,"strike":711.0,"vex":78676.21},{"call_oi":43402,"cex":-103932287.41,"cluster_id":null,"gex":412358875516.02,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":45714,"node_type":"VELOCITY","put_oi":2312,"strength":1,"strike":710.0,"vex":-4071825.13},{"call_oi":6815,"cex":3054414.74,"cluster_id":null,"gex":49059665267.48,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":6824,"node_type":"STANDARD","put_oi":9,"strength":1,"strike":709.0,"vex":-1279429.57},{"call_oi":18162,"cex":35548697.17,"cluster_id":null,"gex":114092055331.38,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":18175,"node_type":"STANDARD","put_oi":13,"strength":1,"strike":708.0,"vex":-4691168.73},{"call_oi":18217,"cex":62711191.41,"cluster_id":null,"gex":109024220638.81,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":18285,"node_type":"STANDARD","put_oi":68,"strength":1,"strike":707.0,"vex":-6047348.75},{"call_oi":3487,"cex":52578590.13,"cluster_id":null,"gex":33031698398.24,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":3639,"node_type":"STANDARD","put_oi":152,"strength":1,"strike":706.0,"vex":-2156020.82},{"call_oi":28315,"cex":536588886.23,"cluster_id":null,"gex":237821017261.91,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":29947,"node_type":"VELOCITY","put_oi":1632,"strength":1,"strike":705.0,"vex":-18953751.22},{"call_oi":3690,"cex":35073442.23,"cluster_id":null,"gex":19213067397.27,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":4367,"node_type":"STANDARD","put_oi":677,"strength":1,"strike":704.0,"vex":-1840318.09},{"call_oi":4129,"cex":49942727.66,"cluster_id":null,"gex":18807870453.26,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":5612,"node_type":"STANDARD","put_oi":1483,"strength":1,"strike":703.0,"vex":-2032934.55},{"call_oi":7613,"cex":72755043.22,"cluster_id":null,"gex":26802755391.42,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":10702,"node_type":"STANDARD","put_oi":3089,"strength":1,"strike":702.0,"vex":-3290816.69},{"call_oi":7476,"cex":118729536.0,"cluster_id":null,"gex":31293570596.13,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":10613,"node_type":"STANDARD","put_oi":3137,"strength":1,"strike":701.0,"vex":-4240066.47},{"call_oi":32586,"cex":30428385.91,"cluster_id":null,"gex":51521530965.44,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":49980,"node_type":"STANDARD","put_oi":17394,"strength":1,"strike":700.0,"vex":-8056274.01},{"call_oi":11689,"cex":423758694.24,"cluster_id":null,"gex":69483891968.97,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":14526,"node_type":"STANDARD","put_oi":2837,"strength":1,"strike":699.0,"vex":-11333284.17},{"call_oi":10907,"cex":181969739.38,"cluster_id":null,"gex":37550263472.22,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":14586,"node_type":"STANDARD","put_oi":3679,"strength":1,"strike":698.0,"vex":-6754729.5},{"call_oi":855,"cex":9792193.18,"cluster_id":null,"gex":1599075277.41,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":1495,"node_type":"STANDARD","put_oi":640,"strength":1,"strike":697.5,"vex":-291498.71},{"call_oi":13403,"cex":500620401.82,"cluster_id":null,"gex":72776395758.19,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":16682,"node_type":"VELOCITY","put_oi":3279,"strength":1,"strike":697.0,"vex":-13941591.7},{"call_oi":7990,"cex":283569298.35,"cluster_id":null,"gex":34828927622.91,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":11075,"node_type":"STANDARD","put_oi":3085,"strength":1,"strike":696.0,"vex":-7137875.14},{"call_oi":16422,"cex":13688562.02,"cluster_id":null,"gex":-1191048410.49,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":33404,"node_type":"STANDARD","put_oi":16982,"strength":1,"strike":695.0,"vex":391339.83},{"call_oi":5421,"cex":28586819.22,"cluster_id":null,"gex":5718379218.64,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":9970,"node_type":"STANDARD","put_oi":4549,"strength":1,"strike":694.0,"vex":-1325423.22},{"call_oi":12414,"cex":363655363.17,"cluster_id":null,"gex":39551559710.94,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":18491,"node_type":"VELOCITY","put_oi":6077,"strength":1,"strike":693.0,"vex":-9790611.52},{"call_oi":1092,"cex":24036306.24,"cluster_id":null,"gex":2740336137.18,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":1769,"node_type":"STANDARD","put_oi":677,"strength":1,"strike":692.5,"vex":-698320.12},{"call_oi":5151,"cex":117511730.28,"cluster_id":null,"gex":8182263982.04,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":9095,"node_type":"STANDARD","put_oi":3944,"strength":1,"strike":692.0,"vex":-2112599.15},{"call_oi":5935,"cex":-199392476.42,"cluster_id":null,"gex":-22205748688.96,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":true,"net_oi":17622,"node_type":"VELOCITY","put_oi":11687,"strength":1,"strike":691.0,"vex":6215222.67},{"call_oi":20784,"cex":76503315.4,"cluster_id":null,"gex":5472930916.19,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":43270,"node_type":"STANDARD","put_oi":22486,"strength":1,"strike":690.0,"vex":-1468897.23},{"call_oi":5108,"cex":9258842.66,"cluster_id":null,"gex":4343241247.36,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":true,"net_oi":9774,"node_type":"STANDARD","put_oi":4666,"strength":1,"strike":689.0,"vex":-1339486.98},{"call_oi":12342,"cex":380478583.79,"cluster_id":null,"gex":29684054191.96,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":18925,"node_type":"VELOCITY","put_oi":6583,"strength":1,"strike":688.0,"vex":-9444116.38},{"call_oi":1097,"cex":33649807.61,"cluster_id":null,"gex":2948033461.22,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1592,"node_type":"STANDARD","put_oi":495,"strength":1,"strike":687.5,"vex":-964719.6},{"call_oi":6362,"cex":138918629.58,"cluster_id":null,"gex":13681144022.21,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":8964,"node_type":"VELOCITY","put_oi":2602,"strength":1,"strike":687.0,"vex":-4596314.46},{"call_oi":4906,"cex":35332992.63,"cluster_id":null,"gex":1606609348.74,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":10448,"node_type":"STANDARD","put_oi":5542,"strength":1,"strike":686.0,"vex":-519675.15},{"call_oi":14278,"cex":-71693035.52,"cluster_id":null,"gex":-24720701999.08,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":43492,"node_type":"VELOCITY","put_oi":29214,"strength":1,"strike":685.0,"vex":9341221.28},{"call_oi":5679,"cex":67029735.22,"cluster_id":null,"gex":8261699252.67,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":9513,"node_type":"STANDARD","put_oi":3834,"strength":1,"strike":684.0,"vex":-3137228.89},{"call_oi":4772,"cex":5339134.68,"cluster_id":null,"gex":-183050370.82,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":11248,"node_type":"STANDARD","put_oi":6476,"strength":1,"strike":683.0,"vex":105925.77},{"call_oi":897,"cex":20790104.58,"cluster_id":null,"gex":1482609654.51,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1569,"node_type":"STANDARD","put_oi":672,"strength":1,"strike":682.5,"vex":-591120.21},{"call_oi":6688,"cex":116591262.4,"cluster_id":null,"gex":7269428255.85,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":12901,"node_type":"STANDARD","put_oi":6213,"strength":1,"strike":682.0,"vex":-2932577.05},{"call_oi":5619,"cex":58057020.84,"cluster_id":null,"gex":5501239939.8,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":10378,"node_type":"STANDARD","put_oi":4759,"strength":1,"strike":681.0,"vex":-2319343.2},{"call_oi":15890,"cex":-15291981.82,"cluster_id":null,"gex":-4624588420.44,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":43530,"node_type":"STANDARD","put_oi":27640,"strength":1,"strike":680.0,"vex":2157514.98},{"call_oi":6161,"cex":100289632.09,"cluster_id":null,"gex":6183518877.53,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":11768,"node_type":"STANDARD","put_oi":5607,"strength":1,"strike":679.0,"vex":-2766135.63},{"call_oi":3149,"cex":-37756696.76,"cluster_id":null,"gex":-2670765230.38,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":9991,"node_type":"STANDARD","put_oi":6842,"strength":1,"strike":678.0,"vex":1273651.07},{"call_oi":1341,"cex":40349408.65,"cluster_id":null,"gex":2415492644.99,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1972,"node_type":"STANDARD","put_oi":631,"strength":1,"strike":677.5,"vex":-1140537.53},{"call_oi":2693,"cex":-1055976.7,"cluster_id":null,"gex":-823674198.92,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":7718,"node_type":"STANDARD","put_oi":5025,"strength":1,"strike":677.0,"vex":422973.29},{"call_oi":3207,"cex":-22836533.02,"cluster_id":null,"gex":-1393925798.87,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":10101,"node_type":"STANDARD","put_oi":6894,"strength":1,"strike":676.0,"vex":713272.72},{"call_oi":18385,"cex":-280499300.97,"cluster_id":null,"gex":-28565358883.5,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":69518,"node_type":"VELOCITY","put_oi":51133,"strength":1,"strike":675.0,"vex":14873306.56},{"call_oi":5110,"cex":111567832.36,"cluster_id":null,"gex":6659903361.77,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":8047,"node_type":"STANDARD","put_oi":2937,"strength":1,"strike":674.0,"vex":-3485723.01},{"call_oi":5969,"cex":60019370.96,"cluster_id":null,"gex":6686860738.39,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":9612,"node_type":"STANDARD","put_oi":3643,"strength":1,"strike":673.0,"vex":-3621338.52},{"call_oi":3201,"cex":23738188.2,"cluster_id":null,"gex":2238927520.82,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":6968,"node_type":"STANDARD","put_oi":3767,"strength":1,"strike":672.0,"vex":-1237310.27},{"call_oi":1933,"cex":13858492.76,"cluster_id":null,"gex":851056477.13,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":4762,"node_type":"STANDARD","put_oi":2829,"strength":1,"strike":671.0,"vex":-475452.3},{"call_oi":11090,"cex":-281759667.23,"cluster_id":null,"gex":-26824360893.34,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":59873,"node_type":"VELOCITY","put_oi":48783,"strength":1,"strike":670.0,"vex":15927142.6},{"call_oi":1725,"cex":-3949518.61,"cluster_id":null,"gex":-491478081.42,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5750,"node_type":"STANDARD","put_oi":4025,"strength":1,"strike":669.0,"vex":309801.52},{"call_oi":2288,"cex":-28484813.4,"cluster_id":null,"gex":-1847450325.4,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":10617,"node_type":"STANDARD","put_oi":8329,"strength":1,"strike":668.0,"vex":1157764.59},{"call_oi":3488,"cex":54014839.7,"cluster_id":null,"gex":3303291945.46,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5951,"node_type":"STANDARD","put_oi":2463,"strength":1,"strike":667.0,"vex":-2070558.89},{"call_oi":1777,"cex":-44339330.84,"cluster_id":null,"gex":-2410978008.89,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":10490,"node_type":"STANDARD","put_oi":8713,"strength":1,"strike":666.0,"vex":1573009.0},{"call_oi":4655,"cex":-167044619.16,"cluster_id":null,"gex":-13906875261.36,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":37996,"node_type":"VELOCITY","put_oi":33341,"strength":1,"strike":665.0,"vex":9286516.83},{"call_oi":1989,"cex":-8147334.95,"cluster_id":null,"gex":-882410656.34,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":8417,"node_type":"STANDARD","put_oi":6428,"strength":1,"strike":664.0,"vex":614067.47},{"call_oi":1663,"cex":704520.46,"cluster_id":null,"gex":-19982554.41,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5520,"node_type":"STANDARD","put_oi":3857,"strength":1,"strike":663.0,"vex":24872.05},{"call_oi":1960,"cex":14514822.5,"cluster_id":null,"gex":965682849.16,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":4940,"node_type":"STANDARD","put_oi":2980,"strength":1,"strike":662.0,"vex":-672355.65},{"call_oi":2269,"cex":24051532.7,"cluster_id":null,"gex":1051237997.1,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":true,"is_velocity":false,"near_spot":false,"net_oi":5329,"node_type":"STANDARD","put_oi":3060,"strength":1,"strike":661.0,"vex":-744208.08},{"call_oi":10201,"cex":-407933746.09,"cluster_id":null,"gex":-34562849580.9,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":true,"is_velocity":true,"near_spot":false,"net_oi":101048,"node_type":"VELOCITY","put_oi":90847,"strength":1,"strike":660.0,"vex":25671283.68},{"call_oi":3269,"cex":47386217.37,"cluster_id":null,"gex":2294055606.24,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":true,"is_velocity":false,"near_spot":false,"net_oi":6329,"node_type":"STANDARD","put_oi":3060,"strength":1,"strike":659.0,"vex":-1706551.06},{"call_oi":2875,"cex":5513859.41,"cluster_id":null,"gex":-1126978802.41,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":11069,"node_type":"STANDARD","put_oi":8194,"strength":1,"strike":658.0,"vex":894002.45},{"call_oi":6604,"cex":77933113.62,"cluster_id":null,"gex":3248074159.84,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":19074,"node_type":"STANDARD","put_oi":12470,"strength":1,"strike":657.0,"vex":-2500048.95},{"call_oi":2474,"cex":-11207539.01,"cluster_id":null,"gex":-1123060541.58,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":11033,"node_type":"STANDARD","put_oi":8559,"strength":1,"strike":656.0,"vex":916385.48},{"call_oi":7081,"cex":-127362894.35,"cluster_id":null,"gex":-13220207305.2,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":51631,"node_type":"VELOCITY","put_oi":44550,"strength":1,"strike":655.0,"vex":10847787.29},{"call_oi":2148,"cex":4106658.0,"cluster_id":null,"gex":-392368070.21,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":8376,"node_type":"STANDARD","put_oi":6228,"strength":1,"strike":654.0,"vex":343480.71},{"call_oi":1940,"cex":23294917.75,"cluster_id":null,"gex":1043617195.79,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":4195,"node_type":"VELOCITY","put_oi":2255,"strength":1,"strike":653.0,"vex":-868324.5},{"call_oi":1758,"cex":11169038.4,"cluster_id":null,"gex":297885988.41,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5909,"node_type":"STANDARD","put_oi":4151,"strength":1,"strike":652.0,"vex":-243371.4},{"call_oi":1301,"cex":10913065.37,"cluster_id":null,"gex":410352024.59,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3994,"node_type":"STANDARD","put_oi":2693,"strength":1,"strike":651.0,"vex":-350075.83},{"call_oi":6994,"cex":-44454394.13,"cluster_id":null,"gex":-3310970323.82,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":40643,"node_type":"VELOCITY","put_oi":33649,"strength":1,"strike":650.0,"vex":2999646.51},{"call_oi":1384,"cex":2561009.8,"cluster_id":null,"gex":-70666697.04,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5065,"node_type":"STANDARD","put_oi":3681,"strength":1,"strike":649.0,"vex":74428.93},{"call_oi":1469,"cex":-6787816.06,"cluster_id":null,"gex":-146608627.6,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":8436,"node_type":"STANDARD","put_oi":6967,"strength":1,"strike":648.0,"vex":143848.82},{"call_oi":1255,"cex":-23621474.01,"cluster_id":null,"gex":-1715552255.87,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":9656,"node_type":"VELOCITY","put_oi":8401,"strength":1,"strike":647.0,"vex":1617712.9},{"call_oi":891,"cex":6320665.38,"cluster_id":null,"gex":137481549.11,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3689,"node_type":"STANDARD","put_oi":2798,"strength":1,"strike":646.0,"vex":-124216.3},{"call_oi":3651,"cex":-40665218.52,"cluster_id":null,"gex":-3457515194.35,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":27317,"node_type":"VELOCITY","put_oi":23666,"strength":1,"strike":645.0,"vex":3375293.77},{"call_oi":866,"cex":-6261784.5,"cluster_id":null,"gex":-348227005.12,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5298,"node_type":"STANDARD","put_oi":4432,"strength":1,"strike":644.0,"vex":348204.44},{"call_oi":1284,"cex":7359334.35,"cluster_id":null,"gex":264243591.54,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":4282,"node_type":"STANDARD","put_oi":2998,"strength":1,"strike":643.0,"vex":-254603.52},{"call_oi":877,"cex":4936987.32,"cluster_id":null,"gex":123547183.13,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3372,"node_type":"STANDARD","put_oi":2495,"strength":1,"strike":642.0,"vex":-118894.65},{"call_oi":2032,"cex":19862491.17,"cluster_id":null,"gex":870519911.69,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":4637,"node_type":"STANDARD","put_oi":2605,"strength":1,"strike":641.0,"vex":-881748.68},{"call_oi":5795,"cex":-38854926.94,"cluster_id":null,"gex":-2791867519.54,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":38104,"node_type":"VELOCITY","put_oi":32309,"strength":1,"strike":640.0,"vex":2957835.96},{"call_oi":1034,"cex":6812155.89,"cluster_id":null,"gex":71373397.17,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":4264,"node_type":"STANDARD","put_oi":3230,"strength":1,"strike":639.0,"vex":-68010.96},{"call_oi":696,"cex":170490.48,"cluster_id":null,"gex":-121979980.79,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3622,"node_type":"STANDARD","put_oi":2926,"strength":1,"strike":638.0,"vex":136211.86},{"call_oi":930,"cex":-8136757.03,"cluster_id":null,"gex":-574520936.19,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":6302,"node_type":"STANDARD","put_oi":5372,"strength":1,"strike":637.0,"vex":633683.81},{"call_oi":2060,"cex":9949457.57,"cluster_id":null,"gex":579728086.9,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":9976,"node_type":"STANDARD","put_oi":7916,"strength":1,"strike":636.0,"vex":-628106.54},{"call_oi":2285,"cex":-66812983.5,"cluster_id":null,"gex":-3733924869.72,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":35788,"node_type":"VELOCITY","put_oi":33503,"strength":1,"strike":635.0,"vex":4206386.99},{"call_oi":736,"cex":5000150.88,"cluster_id":null,"gex":185459129.22,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2771,"node_type":"STANDARD","put_oi":2035,"strength":1,"strike":634.0,"vex":-205947.41},{"call_oi":582,"cex":1465619.37,"cluster_id":null,"gex":-61474533.53,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3002,"node_type":"STANDARD","put_oi":2420,"strength":1,"strike":633.0,"vex":75215.59},{"call_oi":609,"cex":5785004.66,"cluster_id":null,"gex":71258983.42,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":true,"is_gatekeeper":false,"is_king":false,"is_positive":true,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2574,"node_type":"STANDARD","put_oi":1965,"strength":1,"strike":632.0,"vex":-78636.64},{"call_oi":332,"cex":-3440670.13,"cluster_id":null,"gex":-150335165.31,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":true,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3915,"node_type":"STANDARD","put_oi":3583,"strength":1,"strike":631.0,"vex":180344.16},{"call_oi":1845,"cex":-87390397.44,"cluster_id":null,"gex":-4317590392.68,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":true,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":40854,"node_type":"VELOCITY","put_oi":39009,"strength":1,"strike":630.0,"vex":5196225.06},{"call_oi":355,"cex":-2150084.08,"cluster_id":null,"gex":-53713207.15,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2767,"node_type":"STANDARD","put_oi":2412,"strength":1,"strike":629.0,"vex":68293.54},{"call_oi":207,"cex":-736048.72,"cluster_id":null,"gex":-84222454.1,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1758,"node_type":"STANDARD","put_oi":1551,"strength":1,"strike":628.0,"vex":105494.77},{"call_oi":53,"cex":-3528462.03,"cluster_id":null,"gex":-154105500.5,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2106,"node_type":"STANDARD","put_oi":2053,"strength":1,"strike":627.0,"vex":192775.88},{"call_oi":142,"cex":-6232685.48,"cluster_id":null,"gex":-205770319.1,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":4592,"node_type":"STANDARD","put_oi":4450,"strength":1,"strike":626.0,"vex":260959.6},{"call_oi":1006,"cex":-34635439.91,"cluster_id":null,"gex":-1585781754.2,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":19213,"node_type":"VELOCITY","put_oi":18207,"strength":1,"strike":625.0,"vex":2035781.17},{"call_oi":24,"cex":-5614511.59,"cluster_id":null,"gex":-258105221.32,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2276,"node_type":"STANDARD","put_oi":2252,"strength":1,"strike":624.0,"vex":334493.09},{"call_oi":56,"cex":-3257994.27,"cluster_id":null,"gex":-89282020.98,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2724,"node_type":"STANDARD","put_oi":2668,"strength":1,"strike":623.0,"vex":117385.48},{"call_oi":21,"cex":-4373548.53,"cluster_id":null,"gex":-177063071.09,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2192,"node_type":"STANDARD","put_oi":2171,"strength":1,"strike":622.0,"vex":235131.16},{"call_oi":51,"cex":-3649764.35,"cluster_id":null,"gex":-158290304.8,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1887,"node_type":"STANDARD","put_oi":1836,"strength":1,"strike":621.0,"vex":213111.81},{"call_oi":845,"cex":-44450528.94,"cluster_id":null,"gex":-1955288608.61,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":23588,"node_type":"VELOCITY","put_oi":22743,"strength":1,"strike":620.0,"vex":2662669.56},{"call_oi":18,"cex":-3297961.98,"cluster_id":null,"gex":-142800821.02,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1589,"node_type":"STANDARD","put_oi":1571,"strength":1,"strike":619.0,"vex":196359.51},{"call_oi":14,"cex":-1991456.6,"cluster_id":null,"gex":-78937706.45,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1104,"node_type":"STANDARD","put_oi":1090,"strength":1,"strike":618.0,"vex":109892.28},{"call_oi":21,"cex":-3252860.61,"cluster_id":null,"gex":-144650475.91,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1684,"node_type":"STANDARD","put_oi":1663,"strength":1,"strike":617.0,"vex":203534.74},{"call_oi":15,"cex":-1964797.87,"cluster_id":null,"gex":-75550821.24,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1150,"node_type":"STANDARD","put_oi":1135,"strength":1,"strike":616.0,"vex":107546.49},{"call_oi":156,"cex":-32453537.54,"cluster_id":null,"gex":-1241385183.97,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":17894,"node_type":"VELOCITY","put_oi":17738,"strength":1,"strike":615.0,"vex":1787135.13},{"call_oi":29,"cex":-7259485.04,"cluster_id":null,"gex":-304723114.79,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3514,"node_type":"STANDARD","put_oi":3485,"strength":1,"strike":614.0,"vex":443557.71},{"call_oi":106,"cex":-1447551.95,"cluster_id":null,"gex":-30109189.53,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1685,"node_type":"STANDARD","put_oi":1579,"strength":1,"strike":613.0,"vex":44964.02},{"call_oi":105,"cex":-2642543.07,"cluster_id":null,"gex":-106883918.26,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":1981,"node_type":"VELOCITY","put_oi":1876,"strength":1,"strike":612.0,"vex":159643.48},{"call_oi":103,"cex":-1094228.81,"cluster_id":null,"gex":-32464783.03,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1479,"node_type":"STANDARD","put_oi":1376,"strength":1,"strike":611.0,"vex":49503.57},{"call_oi":316,"cex":-25390389.84,"cluster_id":null,"gex":-988442937.03,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":16731,"node_type":"VELOCITY","put_oi":16415,"strength":1,"strike":610.0,"vex":1503962.93},{"call_oi":3,"cex":-2487002.97,"cluster_id":null,"gex":-91443403.93,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1589,"node_type":"STANDARD","put_oi":1586,"strength":1,"strike":609.0,"vex":140370.83},{"call_oi":4,"cex":-2924375.17,"cluster_id":null,"gex":-112618103.06,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1690,"node_type":"STANDARD","put_oi":1686,"strength":1,"strike":608.0,"vex":174731.72},{"call_oi":0,"cex":-1623293.38,"cluster_id":null,"gex":-50699869.59,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1395,"node_type":"STANDARD","put_oi":1395,"strength":1,"strike":607.0,"vex":79457.72},{"call_oi":4,"cex":-917514.0,"cluster_id":null,"gex":-30349091.29,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":725,"node_type":"STANDARD","put_oi":721,"strength":1,"strike":606.0,"vex":48114.68},{"call_oi":57,"cex":-10463996.36,"cluster_id":null,"gex":-366303822.42,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":7923,"node_type":"VELOCITY","put_oi":7866,"strength":1,"strike":605.0,"vex":586820.31},{"call_oi":3,"cex":-5492447.93,"cluster_id":null,"gex":-204877013.14,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":3186,"node_type":"STANDARD","put_oi":3183,"strength":1,"strike":604.0,"vex":331105.22},{"call_oi":0,"cex":-2540377.0,"cluster_id":null,"gex":-87118783.86,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1894,"node_type":"STANDARD","put_oi":1894,"strength":1,"strike":603.0,"vex":142220.12},{"call_oi":5,"cex":-2130818.14,"cluster_id":null,"gex":-61239359.15,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2027,"node_type":"STANDARD","put_oi":2022,"strength":1,"strike":602.0,"vex":100986.29},{"call_oi":0,"cex":-2694490.95,"cluster_id":null,"gex":-73692458.57,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":2686,"node_type":"STANDARD","put_oi":2686,"strength":1,"strike":601.0,"vex":122693.76},{"call_oi":405,"cex":-46794931.95,"cluster_id":null,"gex":-1671678539.72,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":33512,"node_type":"VELOCITY","put_oi":33107,"strength":1,"strike":600.0,"vex":2813172.7},{"call_oi":1,"cex":-1232216.54,"cluster_id":null,"gex":-32442158.79,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1263,"node_type":"STANDARD","put_oi":1262,"strength":1,"strike":599.0,"vex":55080.31},{"call_oi":0,"cex":-1017147.99,"cluster_id":null,"gex":-27491402.06,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":999,"node_type":"STANDARD","put_oi":999,"strength":1,"strike":598.0,"vex":47120.1},{"call_oi":0,"cex":-1385510.26,"cluster_id":null,"gex":-43362956.9,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1153,"node_type":"STANDARD","put_oi":1153,"strength":1,"strike":597.0,"vex":75060.94},{"call_oi":0,"cex":-1284503.31,"cluster_id":null,"gex":-37855473.61,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1151,"node_type":"STANDARD","put_oi":1151,"strength":1,"strike":596.0,"vex":66145.02},{"call_oi":144,"cex":-6582730.43,"cluster_id":null,"gex":-214048195.81,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":6481,"node_type":"VELOCITY","put_oi":6337,"strength":1,"strike":595.0,"vex":378338.31},{"call_oi":0,"cex":-766415.58,"cluster_id":null,"gex":-18908980.45,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":841,"node_type":"STANDARD","put_oi":841,"strength":1,"strike":594.0,"vex":33661.37},{"call_oi":0,"cex":-925084.55,"cluster_id":null,"gex":-27828191.87,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":793,"node_type":"STANDARD","put_oi":793,"strength":1,"strike":593.0,"vex":50002.9},{"call_oi":4,"cex":-1650543.55,"cluster_id":null,"gex":-51087647.82,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":1417,"node_type":"STANDARD","put_oi":1413,"strength":1,"strike":592.0,"vex":92654.27},{"call_oi":0,"cex":-7617369.21,"cluster_id":null,"gex":-247299102.59,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5990,"node_type":"STANDARD","put_oi":5990,"strength":1,"strike":591.0,"vex":452666.74},{"call_oi":210,"cex":-23255736.58,"cluster_id":null,"gex":-680100648.88,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":24037,"node_type":"STANDARD","put_oi":23827,"strength":1,"strike":590.0,"vex":1257280.07},{"call_oi":145,"cex":-20980224.64,"cluster_id":null,"gex":-608016746.15,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":21847,"node_type":"STANDARD","put_oi":21702,"strength":1,"strike":585.0,"vex":1174846.98},{"call_oi":317,"cex":-17665250.71,"cluster_id":null,"gex":-515564732.3,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":19485,"node_type":"STANDARD","put_oi":19168,"strength":1,"strike":580.0,"vex":1040588.48},{"call_oi":358,"cex":-13947684.93,"cluster_id":null,"gex":-313217909.88,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":25871,"node_type":"STANDARD","put_oi":25513,"strength":1,"strike":575.0,"vex":659937.5},{"call_oi":475,"cex":-8562978.33,"cluster_id":null,"gex":-194983616.12,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":19597,"node_type":"STANDARD","put_oi":19122,"strength":1,"strike":570.0,"vex":428911.16},{"call_oi":316,"cex":-3529085.06,"cluster_id":null,"gex":-93192995.59,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":8505,"node_type":"STANDARD","put_oi":8189,"strength":1,"strike":565.0,"vex":213611.29},{"call_oi":425,"cex":-62990691.23,"cluster_id":null,"gex":-1781526180.7,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":true,"near_spot":false,"net_oi":82374,"node_type":"VELOCITY","put_oi":81949,"strength":1,"strike":560.0,"vex":4205661.32},{"call_oi":266,"cex":-1047479.06,"cluster_id":null,"gex":-24827444.79,"is_call_wall":false,"is_cluster":false,"is_double_stack":false,"is_flip":false,"is_gatekeeper":false,"is_king":false,"is_positive":false,"is_put_wall":false,"is_velocity":false,"near_spot":false,"net_oi":5450,"node_type":"STANDARD","put_oi":5184,"strength":1,"strike":555.0,"vex":62264.84}],"price_frames":{"1D":[{"close":687.1,"high":689.25,"low":685.05,"open":687.97,"time":"2026-01-22"},{"close":687.35,"high":689.08,"low":685.29,"open":686.28,"time":"2026-01-23"},{"close":690.84,"high":692.24,"low":688.04,"open":688.61,"time":"2026-01-26"},{"close":693.6,"high":694.63,"low":691.68,"open":692.29,"time":"2026-01-27"},{"close":693.53,"high":695.94,"low":692.05,"open":695.15,"time":"2026-01-28"},{"close":692.15,"high":695.16,"low":682.96,"open":694.49,"time":"2026-01-29"},{"close":690.09,"high":692.32,"low":685.25,"open":689.91,"time":"2026-01-30"},{"close":693.52,"high":695.03,"low":687.54,"open":687.7,"time":"2026-02-02"},{"close":687.65,"high":695.06,"low":682.17,"open":694.31,"time":"2026-02-03"},{"close":684.32,"high":689.57,"low":679.9,"open":688.47,"time":"2026-02-04"},{"close":675.77,"high":681.83,"low":673.95,"open":679.09,"time":"2026-02-05"},{"close":688.74,"high":690.42,"low":679.0,"open":679.6,"time":"2026-02-06"},{"close":692.06,"high":693.97,"low":686.47,"open":687.54,"time":"2026-02-09"},{"close":690.23,"high":694.64,"low":689.78,"open":693.06,"time":"2026-02-10"},{"close":690.08,"high":695.24,"low":687.3,"open":694.49,"time":"2026-02-11"},{"close":679.41,"high":693.46,"low":678.52,"open":692.35,"time":"2026-02-12"},{"close":679.89,"high":684.41,"low":675.67,"open":679.83,"time":"2026-02-13"},{"close":680.99,"high":683.07,"low":673.94,"open":678.29,"time":"2026-02-17"},{"close":684.42,"high":687.27,"low":680.97,"open":682.16,"time":"2026-02-18"},{"close":682.62,"high":684.31,"low":679.69,"open":681.98,"time":"2026-02-19"},{"close":687.55,"high":688.18,"low":679.87,"open":680.46,"time":"2026-02-20"},{"close":680.53,"high":688.12,"low":678.52,"open":685.96,"time":"2026-02-23"},{"close":685.48,"high":686.48,"low":678.15,"open":680.04,"time":"2026-02-24"},{"close":691.26,"high":691.79,"low":688.22,"open":688.3,"time":"2026-02-25"},{"close":687.42,"high":691.41,"low":682.49,"open":691.39,"time":"2026-02-26"},{"close":684.12,"high":684.99,"low":679.78,"open":681.23,"time":"2026-02-27"},{"close":684.51,"high":686.74,"low":676.17,"open":676.85,"time":"2026-03-02"},{"close":678.48,"high":680.75,"low":667.84,"open":673.22,"time":"2026-03-03"},{"close":683.26,"high":685.22,"low":677.77,"open":679.77,"time":"2026-03-04"},{"close":679.45,"high":683.66,"low":673.77,"open":680.22,"time":"2026-03-05"},{"close":670.55,"high":674.27,"low":667.94,"open":671.58,"time":"2026-03-06"},{"close":676.42,"high":678.07,"low":660.59,"open":664.58,"time":"2026-03-09"},{"close":675.34,"high":681.5,"low":672.92,"open":675.87,"time":"2026-03-10"},{"close":674.49,"high":678.23,"low":671.51,"open":675.73,"time":"2026-03-11"},{"close":664.25,"high":669.82,"low":664.06,"open":669.33,"time":"2026-03-12"},{"close":660.49,"high":670.51,"low":659.56,"open":667.45,"time":"2026-03-13"},{"close":667.21,"high":670.24,"low":665.3,"open":666.56,"time":"2026-03-16"},{"close":668.96,"high":672.6,"low":667.88,"open":670.56,"time":"2026-03-17"},{"close":659.63,"high":667.9,"low":659.39,"open":666.54,"time":"2026-03-18"},{"close":658.0,"high":661.17,"low":653.39,"open":655.18,"time":"2026-03-19"},{"close":648.57,"high":656.69,"low":644.72,"open":656.51,"time":"2026-03-20"},{"close":655.38,"high":662.62,"low":653.94,"open":658.07,"time":"2026-03-23"},{"close":653.18,"high":657.03,"low":649.88,"open":651.32,"time":"2026-03-24"},{"close":656.82,"high":660.89,"low":654.24,"open":658.67,"time":"2026-03-25"},{"close":645.09,"high":654.85,"low":644.82,"open":652.06,"time":"2026-03-26"},{"close":634.09,"high":642.66,"low":633.11,"open":642.5,"time":"2026-03-27"},{"close":631.97,"high":640.37,"low":629.28,"open":640.11,"time":"2026-03-30"},{"close":650.34,"high":651.54,"low":637.98,"open":638.94,"time":"2026-03-31"},{"close":655.24,"high":658.52,"low":653.0,"open":653.9,"time":"2026-04-01"},{"close":655.83,"high":658.2,"low":645.11,"open":646.42,"time":"2026-04-02"},{"close":658.93,"high":659.72,"low":655.52,"open":655.86,"time":"2026-04-06"},{"close":659.22,"high":659.61,"low":651.06,"open":656.65,"time":"2026-04-07"},{"close":676.01,"high":677.08,"low":671.46,"open":676.39,"time":"2026-04-08"},{"close":679.91,"high":681.16,"low":673.77,"open":674.84,"time":"2026-04-09"},{"close":679.46,"high":682.03,"low":678.45,"open":681.32,"time":"2026-04-10"},{"close":686.1,"high":686.3,"low":676.58,"open":677.41,"time":"2026-04-13"},{"close":694.46,"high":694.58,"low":687.66,"open":687.69,"time":"2026-04-14"},{"close":699.94,"high":700.28,"low":694.2,"open":695.26,"time":"2026-04-15"},{"close":701.66,"high":702.78,"low":698.53,"open":701.06,"time":"2026-04-16"},{"close":710.14,"high":712.39,"low":705.76,"open":706.14,"time":"2026-04-17"}],"1H":[{"close":674.17,"high":674.36,"low":669.76,"open":673.41,"time":1772807400},{"close":674.42,"high":676.01,"low":672.46,"open":674.13,"time":1772811000},{"close":673.81,"high":676.0,"low":673.35,"open":674.43,"time":1772814600},{"close":674.64,"high":676.11,"low":672.03,"open":673.8,"time":1772818200},{"close":674.92,"high":675.43,"low":673.69,"open":674.67,"time":1772821800},{"close":672.23,"high":675.97,"low":671.98,"open":674.91,"time":1772825400},{"close":672.49,"high":673.4,"low":671.14,"open":672.23,"time":1772829000},{"close":664.06,"high":667.63,"low":662.39,"open":666.39,"time":1773063000},{"close":669.77,"high":669.92,"low":663.98,"open":664.03,"time":1773066600},{"close":670.87,"high":671.6,"low":668.37,"open":669.77,"time":1773070200},{"close":668.84,"high":672.25,"low":668.71,"open":670.87,"time":1773073800},{"close":670.06,"high":670.87,"low":668.09,"open":668.84,"time":1773077400},{"close":677.39,"high":677.52,"low":669.9,"open":670.06,"time":1773081000},{"close":678.3,"high":679.92,"low":675.88,"open":677.37,"time":1773084600},{"close":677.62,"high":678.78,"low":674.76,"open":677.72,"time":1773149400},{"close":681.11,"high":681.68,"low":677.63,"open":677.64,"time":1773153000},{"close":680.6,"high":681.95,"low":679.68,"open":681.1,"time":1773156600},{"close":683.27,"high":683.36,"low":680.61,"open":680.61,"time":1773160200},{"close":679.35,"high":683.25,"low":677.38,"open":683.25,"time":1773163800},{"close":677.41,"high":680.37,"low":677.41,"open":679.32,"time":1773167400},{"close":677.05,"high":678.32,"low":676.23,"open":677.42,"time":1773171000},{"close":676.15,"high":680.08,"low":675.2,"open":677.58,"time":1773235800},{"close":674.67,"high":678.64,"low":674.59,"open":676.14,"time":1773239400},{"close":674.71,"high":675.29,"low":673.51,"open":674.68,"time":1773243000},{"close":676.46,"high":676.77,"low":674.65,"open":674.7,"time":1773246600},{"close":675.27,"high":676.64,"low":673.34,"open":676.47,"time":1773250200},{"close":674.97,"high":675.79,"low":674.32,"open":675.27,"time":1773253800},{"close":676.33,"high":676.6,"low":674.75,"open":674.99,"time":1773257400},{"close":668.06,"high":671.65,"low":668.05,"open":671.16,"time":1773322200},{"close":668.17,"high":670.55,"low":666.92,"open":668.06,"time":1773325800},{"close":668.84,"high":671.31,"low":667.24,"open":668.17,"time":1773329400},{"close":668.56,"high":670.31,"low":667.99,"open":668.77,"time":1773333000},{"close":668.19,"high":669.75,"low":667.27,"open":668.56,"time":1773336600},{"close":667.98,"high":668.48,"low":666.87,"open":668.18,"time":1773340200},{"close":666.04,"high":668.65,"low":665.91,"open":667.99,"time":1773343800},{"close":668.84,"high":672.34,"low":667.73,"open":669.27,"time":1773408600},{"close":664.59,"high":670.23,"low":664.43,"open":668.87,"time":1773412200},{"close":664.33,"high":665.33,"low":663.1,"open":664.57,"time":1773415800},{"close":664.37,"high":665.23,"low":663.13,"open":664.32,"time":1773419400},{"close":663.34,"high":664.52,"low":662.08,"open":664.35,"time":1773423000},{"close":662.37,"high":664.81,"low":662.16,"open":663.33,"time":1773426600},{"close":662.3,"high":663.0,"low":661.36,"open":662.37,"time":1773430200},{"close":670.27,"high":671.4,"low":667.7,"open":668.38,"time":1773667800},{"close":670.06,"high":670.35,"low":667.58,"open":670.27,"time":1773671400},{"close":667.45,"high":670.64,"low":667.15,"open":670.04,"time":1773675000},{"close":669.2,"high":669.75,"low":667.12,"open":667.42,"time":1773678600},{"close":669.8,"high":670.08,"low":667.98,"open":669.2,"time":1773682200},{"close":669.27,"high":672.07,"low":668.69,"open":669.8,"time":1773685800},{"close":668.96,"high":669.43,"low":668.42,"open":669.27,"time":1773689400},{"close":672.56,"high":674.43,"low":671.56,"open":672.39,"time":1773754200},{"close":671.64,"high":673.47,"low":671.6,"open":672.57,"time":1773757800},{"close":671.21,"high":672.19,"low":669.7,"open":671.63,"time":1773761400},{"close":671.53,"high":671.94,"low":670.72,"open":671.2,"time":1773765000},{"close":670.9,"high":672.3,"low":670.86,"open":671.53,"time":1773768600},{"close":671.04,"high":671.6,"low":670.59,"open":670.9,"time":1773772200},{"close":670.73,"high":671.28,"low":670.47,"open":671.04,"time":1773775800},{"close":665.96,"high":669.72,"low":665.72,"open":668.36,"time":1773840600},{"close":666.93,"high":668.0,"low":665.66,"open":665.97,"time":1773844200},{"close":667.07,"high":667.62,"low":666.49,"open":666.91,"time":1773847800},{"close":665.84,"high":667.3,"low":665.43,"open":667.07,"time":1773851400},{"close":666.12,"high":667.44,"low":665.29,"open":665.84,"time":1773855000},{"close":662.91,"high":666.3,"low":662.68,"open":666.11,"time":1773858600},{"close":661.57,"high":663.22,"low":661.19,"open":662.9,"time":1773862200},{"close":656.33,"high":659.47,"low":655.17,"open":656.97,"time":1773927000},{"close":657.72,"high":659.71,"low":656.26,"open":656.34,"time":1773930600},{"close":657.95,"high":659.04,"low":656.18,"open":657.72,"time":1773934200},{"close":657.12,"high":658.71,"low":655.61,"open":657.98,"time":1773937800},{"close":657.17,"high":658.62,"low":656.16,"open":657.1,"time":1773941400},{"close":660.25,"high":662.98,"low":656.32,"open":657.18,"time":1773945000},{"close":659.72,"high":660.74,"low":658.98,"open":660.24,"time":1773948600},{"close":651.86,"high":656.69,"low":651.48,"open":656.51,"time":1774013400},{"close":651.92,"high":654.16,"low":651.2,"open":651.86,"time":1774017000},{"close":653.1,"high":653.99,"low":651.73,"open":651.94,"time":1774020600},{"close":652.16,"high":653.4,"low":651.75,"open":653.1,"time":1774024200},{"close":649.43,"high":652.37,"low":648.66,"open":652.19,"time":1774027800},{"close":647.12,"high":649.66,"low":646.78,"open":649.43,"time":1774031400},{"close":648.51,"high":648.52,"low":644.72,"open":647.13,"time":1774035000},{"close":660.99,"high":662.27,"low":656.07,"open":658.07,"time":1774272600},{"close":660.89,"high":662.61,"low":659.95,"open":660.98,"time":1774276200},{"close":654.09,"high":661.33,"low":653.94,"open":660.9,"time":1774279800},{"close":655.28,"high":656.74,"low":653.99,"open":654.11,"time":1774283400},{"close":657.39,"high":658.31,"low":655.26,"open":655.28,"time":1774287000},{"close":657.33,"high":659.65,"low":657.03,"open":657.41,"time":1774290600},{"close":655.37,"high":658.35,"low":655.37,"open":657.32,"time":1774294200},{"close":652.49,"high":653.59,"low":649.88,"open":651.32,"time":1774359000},{"close":656.04,"high":656.83,"low":651.22,"open":652.51,"time":1774362600},{"close":655.96,"high":657.03,"low":654.3,"open":656.06,"time":1774366200},{"close":653.41,"high":656.12,"low":652.55,"open":655.97,"time":1774369800},{"close":654.59,"high":654.98,"low":652.38,"open":653.4,"time":1774373400},{"close":654.45,"high":656.59,"low":654.28,"open":654.59,"time":1774377000},{"close":653.2,"high":654.78,"low":652.56,"open":654.45,"time":1774380600},{"close":658.14,"high":660.89,"low":655.67,"open":658.67,"time":1774445400},{"close":657.84,"high":659.25,"low":654.24,"open":658.16,"time":1774449000},{"close":657.5,"high":658.24,"low":656.01,"open":657.85,"time":1774452600},{"close":658.02,"high":658.32,"low":656.91,"open":657.46,"time":1774456200},{"close":657.52,"high":659.38,"low":657.33,"open":658.04,"time":1774459800},{"close":656.51,"high":657.81,"low":655.58,"open":657.51,"time":1774463400},{"close":656.74,"high":657.06,"low":655.76,"open":656.51,"time":1774467000},{"close":653.62,"high":654.84,"low":650.73,"open":652.06,"time":1774531800},{"close":651.71,"high":654.85,"low":650.82,"open":653.62,"time":1774535400},{"close":649.47,"high":652.35,"low":649.29,"open":651.71,"time":1774539000},{"close":648.62,"high":650.1,"low":647.98,"open":649.49,"time":1774542600},{"close":646.6,"high":649.06,"low":646.44,"open":648.62,"time":1774546200},{"close":646.21,"high":647.65,"low":645.85,"open":646.61,"time":1774549800},{"close":645.1,"high":646.27,"low":644.82,"open":646.21,"time":1774553400},{"close":639.1,"high":642.66,"low":638.59,"open":642.5,"time":1774618200},{"close":640.96,"high":641.49,"low":638.3,"open":639.1,"time":1774621800},{"close":638.89,"high":642.14,"low":638.58,"open":640.96,"time":1774625400},{"close":636.62,"high":639.93,"low":636.59,"open":638.88,"time":1774629000},{"close":635.77,"high":637.25,"low":635.13,"open":636.62,"time":1774632600},{"close":634.86,"high":636.72,"low":634.52,"open":635.77,"time":1774636200},{"close":634.08,"high":635.35,"low":633.1,"open":634.86,"time":1774639800},{"close":635.86,"high":640.37,"low":634.68,"open":640.11,"time":1774877400},{"close":636.46,"high":638.8,"low":634.73,"open":635.85,"time":1774881000},{"close":635.26,"high":638.47,"low":635.16,"open":636.45,"time":1774884600},{"close":633.4,"high":636.01,"low":633.24,"open":635.27,"time":1774888200},{"close":632.28,"high":634.63,"low":632.26,"open":633.4,"time":1774891800},{"close":629.58,"high":633.17,"low":629.28,"open":632.29,"time":1774895400},{"close":632.0,"high":632.64,"low":629.35,"open":629.59,"time":1774899000},{"close":642.5,"high":642.95,"low":638.31,"open":638.94,"time":1774963800},{"close":640.68,"high":642.65,"low":637.98,"open":642.48,"time":1774967400},{"close":642.12,"high":642.63,"low":639.52,"open":640.68,"time":1774971000},{"close":647.0,"high":649.46,"low":641.65,"open":642.11,"time":1774974600},{"close":647.71,"high":648.41,"low":646.14,"open":647.03,"time":1774978200},{"close":649.4,"high":649.91,"low":647.2,"open":647.7,"time":1774981800},{"close":650.24,"high":651.54,"low":649.32,"open":649.42,"time":1774985400},{"close":655.03,"high":656.05,"low":653.0,"open":653.9,"time":1775050200},{"close":656.33,"high":657.07,"low":653.58,"open":655.03,"time":1775053800},{"close":657.17,"high":658.09,"low":655.93,"open":656.33,"time":1775057400},{"close":658.3,"high":658.52,"low":656.84,"open":657.18,"time":1775061000},{"close":654.23,"high":658.44,"low":653.83,"open":658.31,"time":1775064600},{"close":656.1,"high":656.34,"low":653.67,"open":654.22,"time":1775068200},{"close":655.18,"high":656.75,"low":654.72,"open":656.1,"time":1775071800},{"close":650.34,"high":651.1,"low":645.11,"open":646.42,"time":1775136600},{"close":655.29,"high":658.2,"low":650.1,"open":650.35,"time":1775140200},{"close":652.72,"high":655.89,"low":652.17,"open":655.32,"time":1775143800},{"close":654.63,"high":655.04,"low":652.52,"open":652.71,"time":1775147400},{"close":653.51,"high":654.75,"low":652.55,"open":654.65,"time":1775151000},{"close":654.38,"high":655.27,"low":653.39,"open":653.5,"time":1775154600},{"close":655.88,"high":656.1,"low":654.09,"open":654.37,"time":1775158200},{"close":658.37,"high":659.72,"low":655.52,"open":655.86,"time":1775482200},{"close":656.92,"high":659.06,"low":656.62,"open":658.43,"time":1775485800},{"close":657.79,"high":658.04,"low":656.34,"open":656.93,"time":1775489400},{"close":657.39,"high":658.51,"low":655.52,"open":657.78,"time":1775493000},{"close":658.24,"high":658.65,"low":656.22,"open":657.41,"time":1775496600},{"close":657.88,"high":658.52,"low":657.73,"open":658.23,"time":1775500200},{"close":658.87,"high":658.92,"low":657.81,"open":657.88,"time":1775503800},{"close":654.4,"high":657.58,"low":651.92,"open":656.65,"time":1775568600},{"close":653.26,"high":655.34,"low":651.06,"open":654.45,"time":1775572200},{"close":655.92,"high":657.0,"low":652.57,"open":653.26,"time":1775575800},{"close":655.82,"high":656.88,"low":655.34,"open":655.89,"time":1775579400},{"close":656.15,"high":658.36,"low":655.57,"open":655.83,"time":1775583000},{"close":656.66,"high":658.17,"low":653.41,"open":656.13,"time":1775586600},{"close":659.26,"high":659.6,"low":655.89,"open":656.65,"time":1775590200},{"close":674.13,"high":677.08,"low":673.97,"open":676.39,"time":1775655000},{"close":673.03,"high":674.35,"low":671.46,"open":674.13,"time":1775658600},{"close":675.02,"high":675.67,"low":673.01,"open":673.09,"time":1775662200},{"close":675.01,"high":676.43,"low":674.77,"open":675.03,"time":1775665800},{"close":674.88,"high":676.6,"low":674.34,"open":675.01,"time":1775669400},{"close":673.54,"high":675.32,"low":672.78,"open":674.9,"time":1775673000},{"close":675.88,"high":676.05,"low":673.49,"open":673.54,"time":1775676600},{"close":674.29,"high":675.79,"low":673.93,"open":674.84,"time":1775741400},{"close":675.93,"high":676.55,"low":673.77,"open":674.29,"time":1775745000},{"close":679.9,"high":680.75,"low":675.73,"open":675.92,"time":1775748600},{"close":680.29,"high":681.02,"low":678.97,"open":679.92,"time":1775752200},{"close":678.85,"high":681.16,"low":678.58,"open":680.3,"time":1775755800},{"close":679.92,"high":680.24,"low":678.44,"open":678.86,"time":1775759400},{"close":679.87,"high":680.67,"low":679.83,"open":679.91,"time":1775763000},{"close":681.52,"high":681.93,"low":680.03,"open":681.32,"time":1775827800},{"close":681.24,"high":682.03,"low":680.42,"open":681.54,"time":1775831400},{"close":679.52,"high":681.45,"low":679.11,"open":681.23,"time":1775835000},{"close":678.67,"high":679.71,"low":678.5,"open":679.52,"time":1775838600},{"close":679.4,"high":679.7,"low":678.45,"open":678.65,"time":1775842200},{"close":679.64,"high":679.99,"low":678.87,"open":679.41,"time":1775845800},{"close":679.34,"high":679.65,"low":678.66,"open":679.65,"time":1775849400},{"close":679.57,"high":680.02,"low":676.58,"open":677.41,"time":1776087000},{"close":679.51,"high":680.66,"low":679.31,"open":679.57,"time":1776090600},{"close":681.39,"high":681.62,"low":679.02,"open":679.53,"time":1776094200},{"close":682.48,"high":682.83,"low":680.7,"open":681.38,"time":1776097800},{"close":682.38,"high":682.7,"low":681.87,"open":682.49,"time":1776101400},{"close":683.8,"high":683.84,"low":682.27,"open":682.37,"time":1776105000},{"close":686.01,"high":686.3,"low":683.66,"open":683.8,"time":1776108600},{"close":690.98,"high":691.05,"low":687.66,"open":687.69,"time":1776173400},{"close":692.25,"high":692.47,"low":690.61,"open":690.99,"time":1776177000},{"close":693.59,"high":693.72,"low":692.24,"open":692.25,"time":1776180600},{"close":693.74,"high":694.06,"low":692.83,"open":693.59,"time":1776184200},{"close":692.6,"high":694.1,"low":692.13,"open":693.74,"time":1776187800},{"close":694.24,"high":694.27,"low":692.32,"open":692.6,"time":1776191400},{"close":694.4,"high":694.58,"low":693.41,"open":694.23,"time":1776195000},{"close":696.92,"high":696.94,"low":694.2,"open":695.26,"time":1776259800},{"close":697.37,"high":697.56,"low":695.93,"open":696.92,"time":1776263400},{"close":697.36,"high":697.8,"low":696.8,"open":697.37,"time":1776267000},{"close":697.42,"high":697.62,"low":695.7,"open":697.36,"time":1776270600},{"close":698.5,"high":698.65,"low":697.19,"open":697.42,"time":1776274200},{"close":700.0,"high":700.03,"low":698.48,"open":698.49,"time":1776277800},{"close":699.84,"high":700.28,"low":699.26,"open":699.99,"time":1776281400},{"close":699.14,"high":701.3,"low":698.53,"open":701.06,"time":1776346200},{"close":700.78,"high":702.03,"low":698.87,"open":699.15,"time":1776349800},{"close":702.01,"high":702.78,"low":700.66,"open":700.77,"time":1776353400},{"close":700.7,"high":702.07,"low":699.83,"open":702.02,"time":1776357000},{"close":699.79,"high":701.53,"low":699.47,"open":700.72,"time":1776360600},{"close":700.91,"high":701.2,"low":699.78,"open":699.8,"time":1776364200},{"close":701.55,"high":701.94,"low":700.83,"open":700.91,"time":1776367800},{"close":709.22,"high":709.46,"low":705.76,"open":706.14,"time":1776432600},{"close":710.62,"high":711.34,"low":709.23,"open":709.24,"time":1776436200},{"close":711.51,"high":711.64,"low":710.42,"open":710.63,"time":1776439800},{"close":709.88,"high":712.39,"low":709.03,"open":711.52,"time":1776443400},{"close":709.81,"high":710.7,"low":709.14,"open":709.88,"time":1776447000},{"close":709.26,"high":710.39,"low":708.99,"open":709.81,"time":1776450600},{"close":710.05,"high":710.4,"low":709.26,"open":709.27,"time":1776454200}],"1W":[{"close":483.4,"high":494.19,"low":482.13,"open":494.03,"time":"2024-04-15"},{"close":496.18,"high":497.77,"low":483.66,"open":486.0,"time":"2024-04-22"},{"close":499.14,"high":500.37,"low":487.68,"open":497.97,"time":"2024-04-29"},{"close":508.47,"high":510.22,"low":501.1,"open":501.54,"time":"2024-05-06"},{"close":516.87,"high":518.89,"low":507.39,"open":510.14,"time":"2024-05-13"},{"close":516.86,"high":520.4,"low":512.25,"open":516.99,"time":"2024-05-20"},{"close":514.84,"high":517.91,"low":506.04,"open":517.67,"time":"2024-05-27"},{"close":521.32,"high":524.13,"low":510.18,"open":516.45,"time":"2024-06-03"},{"close":529.88,"high":531.19,"low":519.41,"open":520.51,"time":"2024-06-10"},{"close":531.57,"high":537.05,"low":528.74,"open":529.2,"time":"2024-06-17"},{"close":533.0,"high":538.94,"low":531.26,"open":533.11,"time":"2024-06-24"},{"close":543.21,"high":543.61,"low":531.34,"open":534.38,"time":"2024-07-01"},{"close":548.45,"high":552.05,"low":542.77,"open":543.99,"time":"2024-07-08"},{"close":537.68,"high":553.51,"low":536.62,"open":550.45,"time":"2024-07-15"},{"close":533.22,"high":545.27,"low":526.37,"open":541.6,"time":"2024-07-22"},{"close":521.92,"high":543.43,"low":517.71,"open":534.77,"time":"2024-07-29"},{"close":522.01,"high":523.49,"low":499.75,"open":501.1,"time":"2024-08-05"},{"close":542.89,"high":543.58,"low":520.01,"open":523.2,"time":"2024-08-12"},{"close":550.54,"high":551.57,"low":542.45,"open":543.3,"time":"2024-08-19"},{"close":552.06,"high":552.57,"low":543.6,"open":551.57,"time":"2024-08-26"},{"close":529.22,"high":549.25,"low":528.32,"open":546.84,"time":"2024-09-02"},{"close":550.43,"high":551.43,"low":528.83,"open":533.43,"time":"2024-09-09"},{"close":556.54,"high":561.07,"low":548.36,"open":550.16,"time":"2024-09-16"},{"close":561.41,"high":564.59,"low":557.61,"open":559.32,"time":"2024-09-23"},{"close":562.89,"high":564.27,"low":555.32,"open":560.38,"time":"2024-09-30"},{"close":569.38,"high":570.11,"low":556.65,"open":561.24,"time":"2024-10-07"},{"close":574.3,"high":575.8,"low":568.35,"open":570.99,"time":"2024-10-14"},{"close":568.85,"high":574.55,"low":564.31,"open":573.57,"time":"2024-10-21"},{"close":560.99,"high":573.05,"low":558.43,"open":572.32,"time":"2024-10-28"},{"close":587.66,"high":589.08,"low":557.89,"open":561.12,"time":"2024-11-04"},{"close":575.44,"high":589.6,"low":573.58,"open":589.25,"time":"2024-11-11"},{"close":585.03,"high":585.65,"low":573.75,"open":575.9,"time":"2024-11-18"},{"close":591.94,"high":592.73,"low":584.72,"open":588.97,"time":"2024-11-25"},{"close":597.11,"high":598.35,"low":591.74,"open":592.35,"time":"2024-12-02"},{"close":593.57,"high":597.72,"low":591.53,"open":596.99,"time":"2024-12-09"},{"close":580.74,"high":597.08,"low":570.68,"open":595.33,"time":"2024-12-16"},{"close":586.5,"high":593.87,"low":579.26,"open":582.44,"time":"2024-12-23"},{"close":583.49,"high":584.13,"low":572.2,"open":579.48,"time":"2024-12-30"},{"close":572.19,"high":591.12,"low":570.28,"open":587.74,"time":"2025-01-06"},{"close":589.04,"high":590.79,"low":567.12,"open":567.54,"time":"2025-01-13"},{"close":599.28,"high":602.05,"low":590.11,"open":592.08,"time":"2025-01-20"},{"close":593.21,"high":601.24,"low":586.14,"open":586.3,"time":"2025-01-27"},{"close":592.18,"high":599.43,"low":582.05,"open":584.2,"time":"2025-02-03"},{"close":600.98,"high":602.25,"low":589.95,"open":595.39,"time":"2025-02-10"},{"close":591.36,"high":604.46,"low":590.9,"open":602.15,"time":"2025-02-17"},{"close":585.68,"high":594.41,"low":574.11,"open":593.41,"time":"2025-02-24"},{"close":567.68,"high":588.8,"low":557.54,"open":587.66,"time":"2025-03-03"},{"close":554.76,"high":561.4,"low":541.82,"open":559.47,"time":"2025-03-10"},{"close":555.92,"high":562.79,"low":550.05,"open":554.74,"time":"2025-03-17"},{"close":549.36,"high":569.88,"low":548.78,"open":564.33,"time":"2025-03-24"},{"close":499.55,"high":560.99,"low":499.34,"open":543.6,"time":"2025-03-31"},{"close":527.89,"high":542.4,"low":476.34,"open":483.65,"time":"2025-04-07"},{"close":520.44,"high":538.11,"low":514.39,"open":537.88,"time":"2025-04-14"},{"close":544.4,"high":544.8,"low":502.7,"open":515.25,"time":"2025-04-21"},{"close":560.34,"high":561.94,"low":535.38,"open":545.14,"time":"2025-04-28"},{"close":557.94,"high":563.85,"low":549.74,"open":556.19,"time":"2025-05-05"},{"close":587.47,"high":587.76,"low":570.5,"open":574.88,"time":"2025-05-12"},{"close":572.55,"high":588.79,"low":569.08,"open":581.43,"time":"2025-05-19"},{"close":582.71,"high":586.48,"low":571.87,"open":579.43,"time":"2025-05-26"},{"close":592.35,"high":594.02,"low":578.43,"open":581.1,"time":"2025-06-02"},{"close":590.23,"high":598.2,"low":588.73,"open":592.92,"time":"2025-06-09"},{"close":587.54,"high":597.6,"low":586.14,"open":593.6,"time":"2025-06-16"},{"close":609.74,"high":611.21,"low":586.91,"open":590.04,"time":"2025-06-23"},{"close":620.08,"high":621.01,"low":609.87,"open":612.19,"time":"2025-06-30"},{"close":618.37,"high":621.6,"low":612.67,"open":618.12,"time":"2025-07-07"},{"close":622.3,"high":624.18,"low":612.85,"open":617.92,"time":"2025-07-14"},{"close":631.74,"high":632.22,"low":620.92,"open":623.48,"time":"2025-07-21"},{"close":616.49,"high":634.47,"low":614.08,"open":632.12,"time":"2025-07-28"},{"close":631.82,"high":632.29,"low":620.32,"open":620.41,"time":"2025-08-04"},{"close":638.03,"high":640.76,"low":629.32,"open":632.1,"time":"2025-08-11"},{"close":639.88,"high":641.06,"low":627.63,"open":637.45,"time":"2025-08-18"},{"close":639.62,"high":644.02,"low":636.17,"open":638.62,"time":"2025-08-25"},{"close":641.8,"high":646.72,"low":629.58,"open":632.14,"time":"2025-09-01"},{"close":651.88,"high":653.57,"low":641.78,"open":643.16,"time":"2025-09-08"},{"close":658.12,"high":659.3,"low":648.8,"open":654.09,"time":"2025-09-15"},{"close":658.07,"high":663.56,"low":650.7,"open":658.45,"time":"2025-09-22"},{"close":665.42,"high":668.87,"low":657.86,"open":660.6,"time":"2025-09-29"},{"close":649.32,"high":670.13,"low":649.14,"open":667.82,"time":"2025-10-06"},{"close":660.63,"high":666.44,"low":649.47,"open":656.91,"time":"2025-10-13"},{"close":673.42,"high":674.63,"low":659.54,"open":663.54,"time":"2025-10-20"},{"close":678.2,"high":685.8,"low":675.39,"open":678.86,"time":"2025-10-27"},{"close":667.17,"high":681.92,"low":657.47,"open":681.79,"time":"2025-11-03"},{"close":668.13,"high":681.08,"low":659.51,"open":673.41,"time":"2025-11-10"},{"close":655.3,"high":671.74,"low":647.17,"open":665.91,"time":"2025-11-17"},{"close":679.52,"high":679.8,"low":657.84,"open":658.94,"time":"2025-11-24"},{"close":681.81,"high":684.49,"low":674.9,"open":674.97,"time":"2025-12-01"},{"close":677.9,"high":685.35,"low":675.32,"open":682.7,"time":"2025-12-08"},{"close":676.74,"high":681.88,"low":667.4,"open":681.86,"time":"2025-12-15"},{"close":688.43,"high":689.78,"low":678.74,"open":682.08,"time":"2025-12-22"},{"close":681.31,"high":687.32,"low":677.97,"open":685.67,"time":"2025-12-29"},{"close":692.18,"high":693.42,"low":684.51,"open":684.67,"time":"2026-01-05"},{"close":689.78,"high":694.19,"low":684.17,"open":688.8,"time":"2026-01-12"},{"close":687.35,"high":689.25,"low":674.73,"open":679.63,"time":"2026-01-19"},{"close":690.09,"high":695.94,"low":682.96,"open":688.61,"time":"2026-01-26"},{"close":688.74,"high":695.06,"low":673.95,"open":687.7,"time":"2026-02-02"},{"close":679.89,"high":695.24,"low":675.67,"open":687.54,"time":"2026-02-09"},{"close":687.55,"high":688.18,"low":673.94,"open":678.29,"time":"2026-02-16"},{"close":684.12,"high":691.79,"low":678.15,"open":685.96,"time":"2026-02-23"},{"close":670.55,"high":686.74,"low":667.84,"open":676.85,"time":"2026-03-02"},{"close":660.49,"high":681.5,"low":659.56,"open":664.58,"time":"2026-03-09"},{"close":646.8,"high":672.6,"low":642.96,"open":666.56,"time":"2026-03-16"},{"close":634.09,"high":662.62,"low":633.11,"open":658.07,"time":"2026-03-23"},{"close":655.83,"high":658.52,"low":629.28,"open":640.11,"time":"2026-03-30"},{"close":679.46,"high":682.03,"low":651.06,"open":655.86,"time":"2026-04-06"},{"close":710.14,"high":712.39,"low":676.58,"open":677.41,"time":"2026-04-13"}],"4H":[{"close":673.81,"high":676.01,"low":669.76,"open":673.41,"time":1772802000},{"close":672.49,"high":676.11,"low":671.14,"open":673.8,"time":1772816400},{"close":668.84,"high":672.25,"low":662.39,"open":666.39,"time":1773061200},{"close":678.3,"high":679.92,"low":668.09,"open":668.84,"time":1773075600},{"close":683.27,"high":683.36,"low":674.76,"open":677.72,"time":1773147600},{"close":677.05,"high":683.25,"low":676.23,"open":683.25,"time":1773162000},{"close":676.46,"high":680.08,"low":673.51,"open":677.58,"time":1773234000},{"close":676.33,"high":676.64,"low":673.34,"open":676.47,"time":1773248400},{"close":668.56,"high":671.65,"low":666.92,"open":671.16,"time":1773320400},{"close":666.04,"high":669.75,"low":665.91,"open":668.56,"time":1773334800},{"close":664.37,"high":672.34,"low":663.1,"open":669.27,"time":1773406800},{"close":662.3,"high":664.81,"low":661.36,"open":664.35,"time":1773421200},{"close":669.2,"high":671.4,"low":667.12,"open":668.38,"time":1773666000},{"close":668.96,"high":672.07,"low":667.98,"open":669.2,"time":1773680400},{"close":671.53,"high":674.43,"low":669.7,"open":672.39,"time":1773752400},{"close":670.73,"high":672.3,"low":670.47,"open":671.53,"time":1773766800},{"close":665.84,"high":669.72,"low":665.43,"open":668.36,"time":1773838800},{"close":661.57,"high":667.44,"low":661.19,"open":665.84,"time":1773853200},{"close":657.12,"high":659.71,"low":655.17,"open":656.97,"time":1773925200},{"close":659.72,"high":662.98,"low":656.16,"open":657.1,"time":1773939600},{"close":652.16,"high":656.69,"low":651.2,"open":656.51,"time":1774011600},{"close":648.51,"high":652.37,"low":644.72,"open":652.19,"time":1774026000},{"close":655.28,"high":662.61,"low":653.94,"open":658.07,"time":1774270800},{"close":655.37,"high":659.65,"low":655.26,"open":655.28,"time":1774285200},{"close":653.41,"high":657.03,"low":649.88,"open":651.32,"time":1774357200},{"close":653.2,"high":656.59,"low":652.38,"open":653.4,"time":1774371600},{"close":658.02,"high":660.89,"low":654.24,"open":658.67,"time":1774443600},{"close":656.74,"high":659.38,"low":655.58,"open":658.04,"time":1774458000},{"close":648.62,"high":654.85,"low":647.98,"open":652.06,"time":1774530000},{"close":645.1,"high":649.06,"low":644.82,"open":648.62,"time":1774544400},{"close":636.62,"high":642.66,"low":636.59,"open":642.5,"time":1774616400},{"close":634.08,"high":637.25,"low":633.1,"open":636.62,"time":1774630800},{"close":633.4,"high":640.37,"low":633.24,"open":640.11,"time":1774875600},{"close":632.0,"high":634.63,"low":629.28,"open":633.4,"time":1774890000},{"close":647.0,"high":649.46,"low":637.98,"open":638.94,"time":1774962000},{"close":650.24,"high":651.54,"low":646.14,"open":647.03,"time":1774976400},{"close":658.3,"high":658.52,"low":653.0,"open":653.9,"time":1775048400},{"close":655.18,"high":658.44,"low":653.67,"open":658.31,"time":1775062800},{"close":654.63,"high":658.2,"low":645.11,"open":646.42,"time":1775134800},{"close":655.88,"high":656.1,"low":652.55,"open":654.65,"time":1775149200},{"close":657.39,"high":659.72,"low":655.52,"open":655.86,"time":1775480400},{"close":658.87,"high":658.92,"low":656.22,"open":657.41,"time":1775494800},{"close":655.82,"high":657.58,"low":651.06,"open":656.65,"time":1775566800},{"close":659.26,"high":659.6,"low":653.41,"open":655.83,"time":1775581200},{"close":675.01,"high":677.08,"low":671.46,"open":676.39,"time":1775653200},{"close":675.88,"high":676.6,"low":672.78,"open":675.01,"time":1775667600},{"close":680.29,"high":681.02,"low":673.77,"open":674.84,"time":1775739600},{"close":679.87,"high":681.16,"low":678.44,"open":680.3,"time":1775754000},{"close":678.67,"high":682.03,"low":678.5,"open":681.32,"time":1775826000},{"close":679.34,"high":679.99,"low":678.45,"open":678.65,"time":1775840400},{"close":682.48,"high":682.83,"low":676.58,"open":677.41,"time":1776085200},{"close":686.01,"high":686.3,"low":681.87,"open":682.49,"time":1776099600},{"close":693.74,"high":694.06,"low":687.66,"open":687.69,"time":1776171600},{"close":694.4,"high":694.58,"low":692.13,"open":693.74,"time":1776186000},{"close":697.42,"high":697.8,"low":694.2,"open":695.26,"time":1776258000},{"close":699.84,"high":700.28,"low":697.19,"open":697.42,"time":1776272400},{"close":700.7,"high":702.78,"low":698.53,"open":701.06,"time":1776344400},{"close":701.55,"high":701.94,"low":699.47,"open":700.72,"time":1776358800},{"close":709.88,"high":712.39,"low":705.76,"open":706.14,"time":1776430800},{"close":710.05,"high":710.7,"low":708.99,"open":709.88,"time":1776445200}]},"price_history":[{"close":687.1,"high":689.25,"low":685.05,"open":687.97,"time":"2026-01-22"},{"close":687.35,"high":689.08,"low":685.29,"open":686.28,"time":"2026-01-23"},{"close":690.84,"high":692.24,"low":688.04,"open":688.61,"time":"2026-01-26"},{"close":693.6,"high":694.63,"low":691.68,"open":692.29,"time":"2026-01-27"},{"close":693.53,"high":695.94,"low":692.05,"open":695.15,"time":"2026-01-28"},{"close":692.15,"high":695.16,"low":682.96,"open":694.49,"time":"2026-01-29"},{"close":690.09,"high":692.32,"low":685.25,"open":689.91,"time":"2026-01-30"},{"close":693.52,"high":695.03,"low":687.54,"open":687.7,"time":"2026-02-02"},{"close":687.65,"high":695.06,"low":682.17,"open":694.31,"time":"2026-02-03"},{"close":684.32,"high":689.57,"low":679.9,"open":688.47,"time":"2026-02-04"},{"close":675.77,"high":681.83,"low":673.95,"open":679.09,"time":"2026-02-05"},{"close":688.74,"high":690.42,"low":679.0,"open":679.6,"time":"2026-02-06"},{"close":692.06,"high":693.97,"low":686.47,"open":687.54,"time":"2026-02-09"},{"close":690.23,"high":694.64,"low":689.78,"open":693.06,"time":"2026-02-10"},{"close":690.08,"high":695.24,"low":687.3,"open":694.49,"time":"2026-02-11"},{"close":679.41,"high":693.46,"low":678.52,"open":692.35,"time":"2026-02-12"},{"close":679.89,"high":684.41,"low":675.67,"open":679.83,"time":"2026-02-13"},{"close":680.99,"high":683.07,"low":673.94,"open":678.29,"time":"2026-02-17"},{"close":684.42,"high":687.27,"low":680.97,"open":682.16,"time":"2026-02-18"},{"close":682.62,"high":684.31,"low":679.69,"open":681.98,"time":"2026-02-19"},{"close":687.55,"high":688.18,"low":679.87,"open":680.46,"time":"2026-02-20"},{"close":680.53,"high":688.12,"low":678.52,"open":685.96,"time":"2026-02-23"},{"close":685.48,"high":686.48,"low":678.15,"open":680.04,"time":"2026-02-24"},{"close":691.26,"high":691.79,"low":688.22,"open":688.3,"time":"2026-02-25"},{"close":687.42,"high":691.41,"low":682.49,"open":691.39,"time":"2026-02-26"},{"close":684.12,"high":684.99,"low":679.78,"open":681.23,"time":"2026-02-27"},{"close":684.51,"high":686.74,"low":676.17,"open":676.85,"time":"2026-03-02"},{"close":678.48,"high":680.75,"low":667.84,"open":673.22,"time":"2026-03-03"},{"close":683.26,"high":685.22,"low":677.77,"open":679.77,"time":"2026-03-04"},{"close":679.45,"high":683.66,"low":673.77,"open":680.22,"time":"2026-03-05"},{"close":670.55,"high":674.27,"low":667.94,"open":671.58,"time":"2026-03-06"},{"close":676.42,"high":678.07,"low":660.59,"open":664.58,"time":"2026-03-09"},{"close":675.34,"high":681.5,"low":672.92,"open":675.87,"time":"2026-03-10"},{"close":674.49,"high":678.23,"low":671.51,"open":675.73,"time":"2026-03-11"},{"close":664.25,"high":669.82,"low":664.06,"open":669.33,"time":"2026-03-12"},{"close":660.49,"high":670.51,"low":659.56,"open":667.45,"time":"2026-03-13"},{"close":667.21,"high":670.24,"low":665.3,"open":666.56,"time":"2026-03-16"},{"close":668.96,"high":672.6,"low":667.88,"open":670.56,"time":"2026-03-17"},{"close":659.63,"high":667.9,"low":659.39,"open":666.54,"time":"2026-03-18"},{"close":658.0,"high":661.17,"low":653.39,"open":655.18,"time":"2026-03-19"},{"close":648.57,"high":656.69,"low":644.72,"open":656.51,"time":"2026-03-20"},{"close":655.38,"high":662.62,"low":653.94,"open":658.07,"time":"2026-03-23"},{"close":653.18,"high":657.03,"low":649.88,"open":651.32,"time":"2026-03-24"},{"close":656.82,"high":660.89,"low":654.24,"open":658.67,"time":"2026-03-25"},{"close":645.09,"high":654.85,"low":644.82,"open":652.06,"time":"2026-03-26"},{"close":634.09,"high":642.66,"low":633.11,"open":642.5,"time":"2026-03-27"},{"close":631.97,"high":640.37,"low":629.28,"open":640.11,"time":"2026-03-30"},{"close":650.34,"high":651.54,"low":637.98,"open":638.94,"time":"2026-03-31"},{"close":655.24,"high":658.52,"low":653.0,"open":653.9,"time":"2026-04-01"},{"close":655.83,"high":658.2,"low":645.11,"open":646.42,"time":"2026-04-02"},{"close":658.93,"high":659.72,"low":655.52,"open":655.86,"time":"2026-04-06"},{"close":659.22,"high":659.61,"low":651.06,"open":656.65,"time":"2026-04-07"},{"close":676.01,"high":677.08,"low":671.46,"open":676.39,"time":"2026-04-08"},{"close":679.91,"high":681.16,"low":673.77,"open":674.84,"time":"2026-04-09"},{"close":679.46,"high":682.03,"low":678.45,"open":681.32,"time":"2026-04-10"},{"close":686.1,"high":686.3,"low":676.58,"open":677.41,"time":"2026-04-13"},{"close":694.46,"high":694.58,"low":687.66,"open":687.69,"time":"2026-04-14"},{"close":699.94,"high":700.28,"low":694.2,"open":695.26,"time":"2026-04-15"},{"close":701.66,"high":702.78,"low":698.53,"open":701.06,"time":"2026-04-16"},{"close":710.14,"high":712.39,"low":705.76,"open":706.14,"time":"2026-04-17"}],"scenario":{"gatekeeper_strikes":[714.0,712.0],"king_positive":false,"king_strike":750.0,"notes":["Velocity / negative King node within 4% of spot \u2014 expect fast, wicky moves","Velocity node at $735.00 \u2014 sharp reversal or acceleration on touch","Regime: DAMPENED \u2014 reversal/mean-reversion favored at nodes"],"scenario":"VOLATILITY_EVENT","velocity_strikes":[748.0,745.0,743.0,740.0,735.0,725.0,723.0,720.0,715.0,710.0,705.0,697.0,693.0,691.0,688.0,687.0,685.0,675.0,670.0,665.0,660.0,655.0,653.0,650.0,647.0,645.0,640.0,635.0,630.0,625.0,620.0,615.0,612.0,610.0,605.0,600.0,595.0,560.0]},"spot":710.14,"symbol":"SPY"};
+// Override network functions for static preview
+async function checkServer(){ serverOk=true; setConn('live','static preview · SPY'); return true; }
+async function fetchTicker(sym, force){
+  curData = BAKED_SPY;
+  return BAKED_SPY;
+}
+async function fetchAll(){
+  const d = BAKED_SPY;
+  TICKERS.forEach(s => {
+    allData[s] = {symbol:s, spot:d.spot, chg_pct:d.chg_pct, levels:d.levels, fetched_at:d.fetched_at};
+  });
+  buildMini();
+}
+
+const TICKERS = ["SPY","XOM","UPS","RIVN","NVDA","AMD","AAPL","HOOD","AVGO","SOFI","AFRM"];
+const REFRESH_MS = 5 * 60 * 1000;  // 5 minutes
+
+/* ════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════ */
+let curSym   = 'SPY';
+let mode     = 'gex';
+let curData  = null;   // full node data for current ticker
+let allData  = {};     // sym → summary (from /api/gex/all)
+let hovered  = null;
+let serverOk = false;
+
+/* ════════════════════════════════════════════
+   CONNECTION STATUS
+   ════════════════════════════════════════════ */
+function setConn(state, msg){
+  const dot = document.getElementById('conn-dot');
+  const lbl = document.getElementById('conn-lbl');
+  dot.className = 'dot ' + state;
+  lbl.textContent = msg;
+}
+
+async function checkServer(){
+  try {
+    const r = await fetch(`${API}/health`, {signal: AbortSignal.timeout(3000)});
+    if(r.ok){ serverOk = true; setConn('live','live data'); return true; }
+  } catch(e){}
+  serverOk = false;
+  setConn('error','server offline — start sinclair_server.py');
+  return false;
+}
+
+/* ════════════════════════════════════════════
+   FETCH
+   ════════════════════════════════════════════ */
+async function fetchTicker(sym, force=false){
+  showLoader(`FETCHING ${sym}...`);
+  try {
+    const url = force ? `${API}/refresh/${sym}` : `${API}/gex/${sym}`;
+    const r = await fetch(url, {signal: AbortSignal.timeout(30000)});
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if(data.error) throw new Error(data.error);
+    curData = data;
+    hideLoader();
+    return data;
+  } catch(e) {
+    hideLoader();
+    setConn('error', e.message.slice(0,40));
+    return null;
+  }
+}
+
+async function fetchAll(){
+  try {
+    const r = await fetch(`${API}/gex/all`, {signal: AbortSignal.timeout(5000)});
+    if(!r.ok) return;
+    const j = await r.json();
+    j.tickers.forEach(t => { if(t.levels) allData[t.symbol] = t; });
+    buildMini();
+  } catch(e){}
+}
+
+/* ════════════════════════════════════════════
+   TABS
+   ════════════════════════════════════════════ */
+const tabsEl = document.getElementById('tabs');
+TICKERS.forEach(s => {
+  const b = document.createElement('button');
+  b.className = 'ttab' + (s===curSym?' on':'');
+  b.textContent = s;
+  b.onclick = () => pick(s);
+  tabsEl.appendChild(b);
+});
+
+function setMode(m, el){
+  mode = m;
+  document.querySelectorAll('.mbtn').forEach(b => b.classList.toggle('on', b===el));
+  if(curData) renderAll(curData);
+}
+
+async function pick(sym){
+  curSym = sym;
+  document.querySelectorAll('.ttab').forEach(b => b.classList.toggle('on', b.textContent===sym));
+  document.querySelectorAll('.mticker').forEach((b,i) => b.classList.toggle('on', TICKERS[i]===sym));
+  const data = await fetchTicker(sym);
+  if(data) renderAll(data);
+}
+
+async function forceRefresh(){
+  const data = await fetchTicker(curSym, true);
+  if(data){ curData = data; renderAll(data); }
+  await fetchAll();
+}
+
+/* ════════════════════════════════════════════
+   LOADER
+   ════════════════════════════════════════════ */
+function showLoader(msg='LOADING...'){
+  document.getElementById('loader').style.display='flex';
+  document.getElementById('loader-text').textContent=msg;
+}
+function hideLoader(){
+  document.getElementById('loader').style.display='none';
+}
+
+/* ════════════════════════════════════════════
+   SIDEBAR RENDER
+   ════════════════════════════════════════════ */
+function fmt(p, sym){ 
+  if(p==null) return '—';
+  if(sym==='AVGO') return '$'+Math.round(p).toLocaleString();
+  if(p>=100) return '$'+p.toFixed(0);
+  return '$'+p.toFixed(2);
+}
+
+const SCENARIO_CFG = {
+  TRENDING_DAY:     { c:'var(--green)',  icon:'→', label:'Trending day'      },
+  RANGE_BOUND:      { c:'var(--yellow)', icon:'↔', label:'Range-bound / pin' },
+  VOLATILITY_EVENT: { c:'var(--red)',    icon:'⚡', label:'Volatility event'  },
+  GATEKEEPER_TEST:  { c:'var(--orange)', icon:'⬡', label:'Gatekeeper test'   },
+  STANDARD:         { c:'var(--t2)',     icon:'·', label:'Standard'          },
+  UNKNOWN:          { c:'var(--t4)',     icon:'?', label:'Unknown'           },
+};
+
+function renderScenario(d){
+  const sc  = d.scenario;
+  if(!sc){ document.getElementById('scenario-el').innerHTML=''; return; }
+  const cfg = SCENARIO_CFG[sc.scenario] || SCENARIO_CFG.STANDARD;
+  const notes = (sc.notes||[]).slice(0,3);
+  const el  = document.getElementById('scenario-el');
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
+      <span style="font-size:14px;color:${cfg.c}">${cfg.icon}</span>
+      <span style="font-family:var(--mono);font-size:10px;font-weight:600;color:${cfg.c};letter-spacing:.06em;text-transform:uppercase">${cfg.label}</span>
+    </div>
+    ${notes.map(n=>`<div style="font-size:10px;color:var(--t2);line-height:1.5;padding:2px 0;border-left:2px solid ${cfg.c};padding-left:6px;margin-bottom:3px">${n}</div>`).join('')}`;
+}
+
+function renderSidebar(d){
+  const sym = d.symbol;
+  const L   = d.levels;
+
+  // Spot
+  const sp = document.getElementById('sb-spot');
+  sp.textContent = fmt(d.spot, sym);
+  sp.className   = 'sv ' + (d.chg_pct >= 0 ? 'g' : 'r');
+  document.getElementById('sb-chg').textContent =
+    (d.chg_pct>=0?'+':'') + d.chg_pct + '%  $'+(d.chg_pct>=0?'+':'')+d.chg_dollar;
+
+  // Key levels sorted high → low
+  const levels = [
+    {n:'Call wall',  p:L.call_wall,   c:'var(--yellow)', note:'resist'},
+    {n:'★ King',     p:L.max_pain,    c:'var(--yellow)', note:'EOW pin'},
+    {n:'Spot',       p:d.spot,        c:'var(--green)',  note:'now'},
+    {n:'Flip',       p:L.gamma_flip,  c:'var(--blue)',   note:'regime'},
+    {n:'Put wall',   p:L.put_wall,    c:'var(--purple)', note:'support'},
+  ].filter(l=>l.p!=null).sort((a,b)=>b.p-a.p);
+
+  const ll = document.getElementById('lvl-list');
+  ll.innerHTML = '';
+  levels.forEach(l => {
+    const row = document.createElement('div');
+    row.className = 'lrow';
+    row.innerHTML = `<div class="ldot" style="background:${l.c}"></div>
+      <div class="lname">${l.n}</div>
+      <div class="lprice">${fmt(l.p,sym)}</div>
+      <div class="lnote">${l.note}</div>`;
+    ll.appendChild(row);
+  });
+
+  // Regime
+  const reg = document.getElementById('regime-el');
+  const isDamp = L.regime === 'DAMPENED';
+  reg.innerHTML = `<div class="regime" style="border-color:var(--${isDamp?'yellow':'purple'});color:var(--${isDamp?'yellow':'purple'})">
+    <span style="width:6px;height:6px;border-radius:50%;background:var(--${isDamp?'yellow':'purple'});display:inline-block"></span>
+    ${L.regime}
+  </div>`;
+
+  // Greek exposures
+  const gr = document.getElementById('greek-rows');
+  gr.innerHTML = `
+    <div class="greek-row"><span class="greek-name">GEX</span><span class="greek-val" style="color:${L.net_gex_m>=0?'var(--yellow)':'var(--purple)'}">${(L.net_gex_m>=0?'+':'')+L.net_gex_m}M</span></div>
+    <div class="greek-row"><span class="greek-name">VEX</span><span class="greek-val" style="color:${L.net_vex_m>=0?'var(--green)':'var(--red)'}">${(L.net_vex_m>=0?'+':'')+L.net_vex_m}M</span><span style="font-size:9px;color:var(--t3);margin-left:6px">${L.vex_bias.replace('_',' ')}</span></div>
+    <div class="greek-row"><span class="greek-name">CEX</span><span class="greek-val" style="color:var(--t2)">${(L.net_cex_k>=0?'+':'')+L.net_cex_k}K</span><span style="font-size:9px;color:var(--t3);margin-left:6px">${L.cex_bias.replace('_',' ')}</span></div>`;
+
+  // Confluence
+  const conf = document.getElementById('conf-el');
+  const cmap = {
+    3: {c:'var(--green)',  t:'HIGH — all 3 greeks aligned'},
+    2: {c:'var(--yellow)', t:'MODERATE — 2 of 3 aligned'},
+    1: {c:'var(--red)',    t:'LOW — signals split'},
+  };
+  const cm = cmap[L.confluence] || cmap[1];
+  conf.innerHTML = `<div class="conf-row"><div class="conf-dot" style="background:${cm.c}"></div><div class="conf-lbl" style="color:${cm.c};font-weight:500">${cm.t}</div></div>`;
+
+  // Expirations
+  const el = document.getElementById('exp-list');
+  el.innerHTML = (d.expirations||[]).map(e =>
+    `<div>${e.expiry} <span style="color:var(--t4)">(${e.dte}d, w=${e.weight})</span></div>`
+  ).join('');
+
+  // Scenario panel
+  renderScenario(d);
+
+  // Timestamp
+  document.getElementById('tslbl').textContent =
+    new Date(d.fetched_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})+' ET';
+}
+
+/* ════════════════════════════════════════════
+   MINI LIST
+   ════════════════════════════════════════════ */
+function buildMini(){
+  const el = document.getElementById('mlist');
+  el.innerHTML = '';
+  TICKERS.forEach((s,i) => {
+    const d = allData[s];
+    const L = d?.levels;
+    const gexM = L ? L.net_gex_m : 0;
+    const pct  = Math.min(Math.abs(gexM)/30, 1);
+    const bc   = gexM >= 0 ? 'var(--yellow)' : 'var(--purple)';
+    const regime = L?.regime || '—';
+    const biasC  = regime==='DAMPENED' ? 'var(--yellow)' : 'var(--purple)';
+    const chg    = d?.chg_pct ?? '—';
+    const chgC   = chg >= 0 ? 'var(--green)' : 'var(--red)';
+    const spot   = d?.spot ? fmt(d.spot, s) : '—';
+
+    const div = document.createElement('div');
+    div.className = 'mticker' + (s===curSym?' on':'');
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="msym">${s}</span>
+        <span class="mchg" style="color:${chgC}">${chg==='—'?'—':(chg>=0?'+':'')+chg+'%'}</span>
+      </div>
+      <div style="color:var(--t2);font-family:var(--mono);font-size:10px">${spot}</div>
+      <div class="mbar"><div class="mbar-fill" style="width:${Math.round(pct*100)}%;background:${bc}"></div></div>
+      <div class="mbias" style="color:${biasC}">${regime}</div>`;
+    div.onclick = () => pick(s);
+    el.appendChild(div);
+  });
+}
+
+/* ════════════════════════════════════════════
+   PRICE CHART (lightweight-charts)
+   ════════════════════════════════════════════ */
+let priceChart = null;
+let candleSeries = null;
+let priceLines = [];
+
+function initPriceChart(){
+  if(priceChart) return;
+  const el = document.getElementById('priceChart');
+  priceChart = LightweightCharts.createChart(el, {
+    layout: { background:{ type:'solid', color:'#080a0e' }, textColor:'#8b93a8', fontSize:11, fontFamily:"'JetBrains Mono',monospace" },
+    grid:   { vertLines:{ color:'rgba(35,40,54,.5)' }, horzLines:{ color:'rgba(35,40,54,.5)' } },
+    rightPriceScale: { borderColor:'#232836', textColor:'#8b93a8' },
+    timeScale: { borderColor:'#232836', timeVisible:false },
+    crosshair: { mode:1, vertLine:{ color:'rgba(255,255,255,.25)', width:1, style:2 }, horzLine:{ color:'rgba(255,255,255,.25)', width:1, style:2 } },
+  });
+  candleSeries = priceChart.addCandlestickSeries({
+    upColor:'#36d68a', downColor:'#ef5350',
+    borderUpColor:'#36d68a', borderDownColor:'#ef5350',
+    wickUpColor:'#36d68a', wickDownColor:'#ef5350',
+  });
+}
+
+function renderPriceChart(d){
+  initPriceChart();
+  if(!d.price_history || d.price_history.length === 0) return;
+
+  candleSeries.setData(d.price_history);
+  document.getElementById('priceHdrSym').textContent = d.symbol;
+
+  // Remove old price lines
+  priceLines.forEach(pl => candleSeries.removePriceLine(pl));
+  priceLines = [];
+
+  const L = d.levels;
+  const lines = [
+    { price: L.call_wall,  color:'#f5c540', title:'CALL WALL' },
+    { price: d.scenario?.king_strike, color:'#f5c540', title:'★ KING', width:2 },
+    { price: L.gamma_flip, color:'#4d9ef5', title:'FLIP' },
+    { price: L.put_wall,   color:'#9c6ef0', title:'PUT WALL' },
+    { price: d.spot,       color:'#36d68a', title:'SPOT', lineStyle:0, width:2 },
+  ];
+  lines.forEach(l => {
+    if(l.price == null) return;
+    priceLines.push(candleSeries.createPriceLine({
+      price: l.price,
+      color: l.color,
+      lineWidth: l.width || 1,
+      lineStyle: l.lineStyle != null ? l.lineStyle : 2,
+      axisLabelVisible: true,
+      title: l.title,
+    }));
+  });
+
+  // Fit price scale to include our levels and candles
+  setTimeout(() => priceChart.timeScale().fitContent(), 0);
+}
+
+/* ════════════════════════════════════════════
+   CANVAS (GEX histogram)
+   ════════════════════════════════════════════ */
+function draw(d){
+  const cw = document.getElementById('gexWrap');
+  const W  = cw.clientWidth || 400;
+  const H  = cw.clientHeight || 560;
+  const cv = document.getElementById('hm');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+
+  const nodes  = d.nodes;           // already sorted high→low strike
+  const N      = nodes.length;
+  if(N===0) return;
+
+  const vals   = nodes.map(n => mode==='gex'?n.gex : mode==='vex'?n.vex : n.net_oi);
+  const maxAbs = Math.max(...vals.map(Math.abs), 1);
+
+  const LPAD=72, RPAD=34, TPAD=18, BPAD=18;
+  const cW   = W - LPAD - RPAD;
+  const cH   = H - TPAD - BPAD;
+  const rowH = Math.max(5, Math.min(34, cH/N));
+  const tot  = rowH * N;
+  const oy   = TPAD + (cH - tot)/2;
+
+  // Grid
+  ctx.strokeStyle='rgba(35,40,54,.8)'; ctx.lineWidth=0.5;
+  [.2,.4,.6,.8].forEach(f=>{
+    const x=LPAD+f*cW*.86;
+    ctx.beginPath();ctx.moveTo(x,oy);ctx.lineTo(x,oy+tot);ctx.stroke();
+  });
+
+  // Zero baseline
+  ctx.strokeStyle='rgba(60,68,90,.8)'; ctx.lineWidth=1; ctx.setLineDash([]);
+  ctx.beginPath();ctx.moveTo(LPAD,oy);ctx.lineTo(LPAD,oy+tot);ctx.stroke();
+
+  // ── Node type visual config ──────────────────────────────────────
+  // Maps node_type → {row glow, dashed line, right-margin badge color}
+  const TYPE_CFG = {
+    KING:         { glow:'rgba(245,197,64,.07)',  line:'rgba(245,197,64,.55)', dash:[4,3], badge:'#f5c540', label:'★ KING'       },
+    GATEKEEPER:   { glow:'rgba(156,110,240,.06)', line:'rgba(156,110,240,.45)',dash:[3,3], badge:'#9c6ef0', label:'⬡ GATE'       },
+    CLUSTER:      { glow:'rgba(77,158,245,.04)',  line:null,                   dash:null,  badge:'#4d9ef5', label:'▬ CLUSTER'    },
+    DOUBLE_STACK: { glow:'rgba(240,154,56,.05)',  line:'rgba(240,154,56,.35)', dash:[2,4], badge:'#f09a38', label:'◈ STACK'      },
+    VELOCITY:     { glow:'rgba(239,83,80,.06)',   line:'rgba(239,83,80,.5)',   dash:[1,3], badge:'#ef5350', label:'⚡ VELOCITY'  },
+    STANDARD:     { glow:null,                    line:null,                   dash:null,  badge:null,      label:null           },
+  };
+
+  // Nodes
+  nodes.forEach((node,i)=>{
+    const val  = mode==='gex'?node.gex : mode==='vex'?node.vex : node.net_oi;
+    const frac = Math.abs(val)/maxAbs;
+    const y    = oy + i*rowH;
+    const isPos = node.is_positive;    // use classifier's determination
+    const cfg   = TYPE_CFG[node.node_type] || TYPE_CFG.STANDARD;
+
+    // Row background glow (by type)
+    if(cfg.glow){
+      ctx.fillStyle = cfg.glow;
+      ctx.fillRect(LPAD, y, cW, rowH);
+    }
+
+    // Type indicator line (dashed horizontal rule on right side)
+    if(cfg.line && rowH >= 7){
+      ctx.strokeStyle = cfg.line; ctx.lineWidth = 0.7;
+      ctx.setLineDash(cfg.dash);
+      ctx.beginPath();
+      ctx.moveTo(LPAD, y + rowH/2);
+      ctx.lineTo(LPAD + cW*0.86, y + rowH/2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Cluster background stripe (slightly more visible band)
+    if(node.node_type === 'CLUSTER'){
+      ctx.fillStyle = isPos ? 'rgba(77,158,245,.04)' : 'rgba(156,110,240,.04)';
+      ctx.fillRect(LPAD, y, cW*0.86, rowH);
+    }
+
+    // Bar background
+    ctx.fillStyle = isPos ? 'rgba(245,197,64,.06)' : 'rgba(156,110,240,.06)';
+    ctx.fillRect(LPAD, y+1, cW*0.86, rowH-2);
+
+    // Bar fill — velocity nodes get a brighter inner glow
+    const bw = frac * cW * 0.86;
+    const alphaBase = node.node_type==='VELOCITY' ? 0.5 : 0.3;
+    ctx.globalAlpha = alphaBase + frac * (1 - alphaBase);
+    ctx.fillStyle   = isPos ? '#f5c540' : '#9c6ef0';
+    ctx.fillRect(LPAD, y+1, bw, rowH-2);
+    ctx.globalAlpha = 1;
+
+    // Leading edge highlight
+    if(bw > 4){
+      ctx.globalAlpha = Math.min(0.95, 0.45 + frac*0.55);
+      ctx.fillRect(LPAD + bw - 2, y+1, 2, rowH-2);
+      ctx.globalAlpha = 1;
+    }
+
+    // Strength dots (right of bar, before type badge) — only if rowH ≥ 10
+    if(rowH >= 10 && node.strength >= 1){
+      const dotX = LPAD + cW*0.86 + 4;
+      const dotY = y + rowH/2;
+      const dotC = isPos ? 'rgba(245,197,64,' : 'rgba(156,110,240,';
+      for(let s=0; s<node.strength; s++){
+        ctx.fillStyle = dotC + (0.25 + s*0.18) + ')';
+        ctx.beginPath();
+        ctx.arc(dotX + s*5, dotY, 1.6, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    // Hover ring
+    if(hovered === node.strike){
+      ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=.9; ctx.setLineDash([]);
+      ctx.strokeRect(LPAD, y+.5, cW*0.86, rowH-1);
+    }
+  });
+
+  // Strike labels + type badges (right margin)
+  ctx.textAlign='right';
+  const step = N>50?6:N>30?4:N>18?3:N>10?2:1;
+  nodes.forEach((node,i)=>{
+    if(i % step !== 0) return;
+    const y = oy + i*rowH + rowH/2;
+    ctx.font = '9px JetBrains Mono,monospace';
+    // Label color: King=gold, Gate=purple, Velocity=red, Stack=orange, rest=dim
+    const lc = node.node_type==='KING'       ? '#f5c540'
+             : node.node_type==='GATEKEEPER' ? '#9c6ef0'
+             : node.node_type==='VELOCITY'   ? '#ef5350'
+             : node.node_type==='DOUBLE_STACK'? '#f09a38'
+             : node.is_call_wall||node.is_put_wall ? '#4d9ef5'
+             : '#505870';
+    ctx.fillStyle = lc;
+    const lbl = node.strike>=200 ? Math.round(node.strike).toString()
+              : node.strike.toFixed(node.strike>=50?0:2);
+    ctx.fillText(lbl, LPAD-4, y+3);
+  });
+
+  // Right-margin type badges (King, Gate, Velocity, Stack only)
+  ctx.textAlign='left';
+  ctx.font='8px JetBrains Mono,monospace';
+  const BADGE_X = W - RPAD - 2;
+  nodes.forEach((node,i)=>{
+    const cfg = TYPE_CFG[node.node_type];
+    if(!cfg?.badge || !cfg?.label) return;
+    const y = oy + i*rowH + rowH/2;
+    if(y < oy || y > oy+tot) return;
+    ctx.fillStyle = cfg.badge;
+    ctx.globalAlpha = 0.75;
+    ctx.fillText(cfg.label, BADGE_X - ctx.measureText(cfg.label).width, y+3);
+    ctx.globalAlpha = 1;
+  });
+
+  // Gamma flip line
+  const flipNode = nodes.find(n=>n.is_flip);
+  if(flipNode){
+    const fi = nodes.indexOf(flipNode);
+    const fy = oy+fi*rowH+rowH/2;
+    ctx.strokeStyle='rgba(77,158,245,.48)'; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+    ctx.beginPath();ctx.moveTo(LPAD,fy);ctx.lineTo(LPAD+cW*.86,fy);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(77,158,245,.6)';ctx.font='8px JetBrains Mono,monospace';ctx.textAlign='left';
+    ctx.fillText('FLIP',LPAD+cW*.86+4,fy+3);
+  }
+
+  // Price line
+  const si = nodes.reduce((b,n,i)=>Math.abs(n.strike-d.spot)<Math.abs(nodes[b].strike-d.spot)?i:b,0);
+  const sy  = oy+si*rowH+rowH/2;
+  ctx.strokeStyle='rgba(54,214,138,.88)'; ctx.lineWidth=1.5; ctx.setLineDash([]);
+  ctx.beginPath();ctx.moveTo(LPAD,sy);ctx.lineTo(W-RPAD,sy);ctx.stroke();
+
+  document.getElementById('ptag').style.cssText=`display:block;top:${sy-9}px`;
+  document.getElementById('ptag').textContent = fmt(d.spot, d.symbol);
+
+  // King tag
+  const ki = nodes.findIndex(n=>n.is_king);
+  const kt = document.getElementById('ktag');
+  if(ki>=0){
+    const ky=oy+ki*rowH+rowH/2;
+    kt.style.cssText=`display:block;top:${ky-9}px;left:${W-132}px`;
+  } else kt.style.display='none';
+
+  cv._layout={oy,rowH,N,LPAD};
+}
+
+/* ════════════════════════════════════════════
+   MOUSE
+   ════════════════════════════════════════════ */
+document.getElementById('hm').addEventListener('mousemove',e=>{
+  if(!curData) return;
+  const L=document.getElementById('hm')._layout;
+  if(!L) return;
+  const idx=Math.floor((e.offsetY-L.oy)/L.rowH);
+  if(idx<0||idx>=L.N){ hovered=null; document.getElementById('xh').style.display='none'; document.getElementById('hp').style.display='none'; draw(curData); return; }
+  const node=curData.nodes[idx];
+  hovered=node.strike;
+
+  document.getElementById('xh').style.cssText=`display:block;top:${L.oy+idx*L.rowH}px`;
+
+  const TYPE_LABELS = {
+    KING:'★ King Node', GATEKEEPER:'⬡ Gatekeeper', CLUSTER:'▬ Cluster',
+    DOUBLE_STACK:'◈ Double Stack', VELOCITY:'⚡ Velocity', STANDARD:'Node'
+  };
+  const TYPE_COLORS = {
+    KING:'#f5c540', GATEKEEPER:'#9c6ef0', CLUSTER:'#4d9ef5',
+    DOUBLE_STACK:'#f09a38', VELOCITY:'#ef5350', STANDARD:'#8b93a8'
+  };
+  const typeLbl = TYPE_LABELS[node.node_type] || 'Node';
+  const typeCol = TYPE_COLORS[node.node_type] || '#8b93a8';
+  const stars   = '●'.repeat(node.strength) + '○'.repeat(5-node.strength);
+  const dist    = ((node.strike-curData.spot)/curData.spot*100).toFixed(1);
+  const charLbl = node.is_positive ? '🟡 Absorbing (Pika)' : '🟣 Amplifying (Barney)';
+
+  const hp=document.getElementById('hp');
+  const cw=document.getElementById('cw');
+  hp.style.cssText=`display:block;top:${Math.min(L.oy+idx*L.rowH-5,cw.clientHeight-130)}px;left:${L.LPAD+20}px`;
+  hp.innerHTML=`<span style="color:${typeCol};font-weight:600">${typeLbl}</span>  <span style="color:var(--t3);font-size:9px">${stars}</span><br>
+Strike: ${fmt(node.strike,curData.symbol)} <span style="color:var(--t3)">(${dist}% from spot)</span><br>
+${charLbl}<br>
+GEX: ${(node.gex/1e6).toFixed(3)}M | VEX: ${(node.vex/1e6).toFixed(3)}M<br>
+Call OI: ${node.call_oi.toLocaleString()} | Put OI: ${node.put_oi.toLocaleString()}`;
+
+  draw(curData);
+});
+
+document.getElementById('hm').addEventListener('mouseleave',()=>{
+  hovered=null;
+  document.getElementById('xh').style.display='none';
+  document.getElementById('hp').style.display='none';
+  if(curData) draw(curData);
+});
+
+/* ════════════════════════════════════════════
+   MAIN RENDER
+   ════════════════════════════════════════════ */
+function renderAll(d){
+  renderSidebar(d);
+  renderPriceChart(d);
+  draw(d);
+}
+
+/* ════════════════════════════════════════════
+   STARTUP + AUTO-REFRESH
+   ════════════════════════════════════════════ */
+async function init(){
+  buildMini();
+  showLoader('CONNECTING TO SINCLAIR SERVER...');
+
+  const ok = await checkServer();
+  if(!ok){
+    hideLoader();
+    document.getElementById('loader').style.display='flex';
+    document.getElementById('loader-text').textContent =
+      'SERVER OFFLINE — run: python sinclair_server.py';
+    return;
+  }
+
+  // Fetch first ticker
+  const data = await fetchTicker(curSym);
+  if(data){ curData = data; renderAll(data); }
+
+  // Fetch all summaries for mini list
+  await fetchAll();
+
+  // Auto-refresh
+  setInterval(async()=>{
+    const d = await fetchTicker(curSym);
+    if(d){ curData = d; renderAll(d); }
+    await fetchAll();
+  }, 1e12);  // disabled in static preview
+}
+
+window.addEventListener('resize', ()=>{
+  if(curData) draw(curData);
+  if(priceChart){
+    const el = document.getElementById('priceChart');
+    priceChart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+  }
+});
+
+init();
+</script>
+</body>
+</html>
