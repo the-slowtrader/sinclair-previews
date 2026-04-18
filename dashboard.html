@@ -797,7 +797,11 @@ window.addEventListener('resize', ()=>{
 
 // ── STATIC PREVIEW OVERRIDES ─────────────────────────────────
 checkServer = async function(){ serverOk=true; setConn('live','static preview · SPY'); return true; };
-fetchTicker = async function(sym, force){ curData = BAKED_SPY; return BAKED_SPY; };
+fetchTicker = async function(sym, force){
+  curData = BAKED_SPY;
+  hideLoader();
+  return BAKED_SPY;
+};
 fetchAll = async function(){
   const d = BAKED_SPY;
   TICKERS.forEach(s => {
