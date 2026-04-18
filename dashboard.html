@@ -50,8 +50,12 @@ html,body{height:100%;background:var(--bg0);color:var(--t1);font-family:var(--sa
 .chart-wrap{flex:1;position:relative;background:var(--bg0);overflow:hidden;display:flex;flex-direction:column}
 .chart-split{flex:1;display:flex;min-height:0}
 .chart-price{flex:1.4;position:relative;border-right:1px solid var(--border);min-width:0}
-.chart-price-hdr{position:absolute;top:10px;left:14px;z-index:5;font-family:var(--mono);font-size:11px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;pointer-events:none}
+.chart-price-hdr{position:absolute;top:10px;left:14px;z-index:5;font-family:var(--mono);font-size:11px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:14px}
 .chart-price-hdr .sym{color:var(--t1);font-weight:600;margin-right:8px}
+.tf-group{display:flex;gap:2px;pointer-events:auto}
+.tf-btn{background:none;border:1px solid var(--border);cursor:pointer;padding:4px 10px;border-radius:4px;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--t3);transition:all .12s}
+.tf-btn:hover{border-color:var(--border3);color:var(--t2)}
+.tf-btn.on{background:var(--bg3);border-color:var(--yellow);color:var(--yellow)}
 .chart-gex{flex:1;position:relative;min-width:0}
 .chart-gex-hdr{position:absolute;top:10px;left:14px;z-index:5;font-family:var(--mono);font-size:11px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;pointer-events:none}
 .right-panel{width:220px;flex-shrink:0;background:var(--bg1);border-left:1px solid var(--border);padding:14px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
@@ -175,7 +179,15 @@ html,body{height:100%;background:var(--bg0);color:var(--t1);font-family:var(--sa
   <div class="chart-wrap" id="cw">
     <div class="chart-split">
       <div class="chart-price" id="priceWrap">
-        <div class="chart-price-hdr"><span class="sym" id="priceHdrSym">SPY</span>Daily · 60d · horizontal lines = gamma levels</div>
+        <div class="chart-price-hdr">
+          <span class="sym" id="priceHdrSym">SPY</span>
+          <span id="priceHdrMeta">price + gamma levels</span>
+          <div class="tf-group" id="tfGroup">
+            <button class="tf-btn" data-tf="1H">1H</button>
+            <button class="tf-btn" data-tf="4H">4H</button>
+            <button class="tf-btn on" data-tf="1D">1D</button>
+          </div>
+        </div>
         <div id="priceChart" style="position:absolute;inset:0"></div>
       </div>
       <div class="chart-gex" id="gexWrap">
@@ -457,6 +469,7 @@ function buildMini(){
 let priceChart = null;
 let candleSeries = null;
 let priceLines = [];
+let curTimeframe = '1D';
 
 function initPriceChart(){
   if(priceChart) return;
@@ -478,38 +491,71 @@ function initPriceChart(){
 
 function renderPriceChart(d){
   initPriceChart();
-  if(!d.price_history || d.price_history.length === 0) return;
+  const frames = d.price_frames || { '1D': d.price_history || [] };
+  const bars   = frames[curTimeframe] || frames['1D'] || [];
+  if(bars.length === 0) return;
 
-  candleSeries.setData(d.price_history);
+  candleSeries.setData(bars);
   document.getElementById('priceHdrSym').textContent = d.symbol;
 
   // Remove old price lines
   priceLines.forEach(pl => candleSeries.removePriceLine(pl));
   priceLines = [];
 
-  const L = d.levels;
-  const lines = [
-    { price: L.call_wall,  color:'#f5c540', title:'CALL WALL' },
-    { price: d.scenario?.king_strike, color:'#f5c540', title:'★ KING', width:2 },
-    { price: L.gamma_flip, color:'#4d9ef5', title:'FLIP' },
-    { price: L.put_wall,   color:'#9c6ef0', title:'PUT WALL' },
-    { price: d.spot,       color:'#36d68a', title:'SPOT', lineStyle:0, width:2 },
-  ];
-  lines.forEach(l => {
-    if(l.price == null) return;
+  const addLine = (price, color, title, opts={}) => {
+    if(price == null) return;
     priceLines.push(candleSeries.createPriceLine({
-      price: l.price,
-      color: l.color,
-      lineWidth: l.width || 1,
-      lineStyle: l.lineStyle != null ? l.lineStyle : 2,
-      axisLabelVisible: true,
-      title: l.title,
+      price,
+      color,
+      lineWidth: opts.width || 1,
+      lineStyle: opts.style != null ? opts.style : 2,
+      axisLabelVisible: opts.axisLabel !== false,
+      title,
     }));
+  };
+
+  const L = d.levels;
+  const sc = d.scenario || {};
+  addLine(L.call_wall,  '#f5c540', 'CALL WALL');
+  addLine(sc.king_strike, '#f5c540', '★ KING', {width:2});
+  addLine(L.gamma_flip, '#4d9ef5', 'FLIP');
+  addLine(L.put_wall,   '#9c6ef0', 'PUT WALL');
+  addLine(d.spot,       '#36d68a', 'SPOT',      {style:0, width:2});
+
+  // Gatekeepers — top 2 nodes blocking the path between spot and King
+  (sc.gatekeeper_strikes || []).slice(0,2).forEach((k,i) =>
+    addLine(k, '#9c6ef0', `G${i+1}`, {style:3, axisLabel:true})
+  );
+
+  // Cluster zones — for each cluster_id, draw its top+bottom strike as faint rails
+  const byCluster = {};
+  (d.nodes || []).forEach(n => {
+    if(n.cluster_id == null) return;
+    (byCluster[n.cluster_id] = byCluster[n.cluster_id] || []).push(n);
+  });
+  Object.values(byCluster).forEach(group => {
+    if(group.length < 3) return;
+    const strikes = group.map(n => n.strike);
+    const lo = Math.min(...strikes), hi = Math.max(...strikes);
+    const pos = group[0].is_positive;
+    const color = pos ? 'rgba(245,197,64,.55)' : 'rgba(156,110,240,.55)';
+    addLine(hi, color, pos ? 'CLUSTER▲' : 'CLUSTER▲', {style:1, axisLabel:false});
+    addLine(lo, color, pos ? 'CLUSTER▼' : 'CLUSTER▼', {style:1, axisLabel:false});
   });
 
-  // Fit price scale to include our levels and candles
   setTimeout(() => priceChart.timeScale().fitContent(), 0);
 }
+
+function setTimeframe(tf){
+  curTimeframe = tf;
+  document.querySelectorAll('.tf-btn').forEach(b =>
+    b.classList.toggle('on', b.dataset.tf === tf)
+  );
+  if(curData) renderPriceChart(curData);
+}
+document.querySelectorAll('.tf-btn').forEach(b =>
+  b.addEventListener('click', () => setTimeframe(b.dataset.tf))
+);
 
 /* ════════════════════════════════════════════
    CANVAS (GEX histogram)
