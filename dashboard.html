@@ -521,16 +521,23 @@ function renderPriceChart(d){
 
   const L = d.levels;
   const sc = d.scenario || {};
+  const nodeBy = {}; (d.nodes || []).forEach(n => nodeBy[n.strike] = n);
+  const kingColor = sc.king_positive ? '#f5c540' : '#9c6ef0';
+  const kingLabel = sc.king_positive ? '★ KING (+)' : '★ KING (−)';
+
   addLine(L.call_wall,  '#f5c540', 'CALL WALL');
-  addLine(sc.king_strike, '#f5c540', '★ KING', {width:2});
+  addLine(sc.king_strike, kingColor, kingLabel, {width:2});
   addLine(L.gamma_flip, '#4d9ef5', 'FLIP');
   addLine(L.put_wall,   '#9c6ef0', 'PUT WALL');
   addLine(d.spot,       '#36d68a', 'SPOT',      {style:0, width:2});
 
   // Gatekeepers — top 2 nodes blocking the path between spot and King
-  (sc.gatekeeper_strikes || []).slice(0,2).forEach((k,i) =>
-    addLine(k, '#9c6ef0', `G${i+1}`, {style:3, axisLabel:true})
-  );
+  (sc.gatekeeper_strikes || []).slice(0,2).forEach((k,i) => {
+    const n = nodeBy[k];
+    const gc = (n && n.is_positive) ? '#f5c540' : '#9c6ef0';
+    const sign = (n && n.is_positive) ? '+' : '−';
+    addLine(k, gc, `G${i+1} (${sign})`, {style:3, axisLabel:true});
+  });
 
   // Cluster zones — for each cluster_id, draw its top+bottom strike as faint rails
   const byCluster = {};
