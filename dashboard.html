@@ -468,6 +468,7 @@ function buildMini(){
    ════════════════════════════════════════════ */
 let priceChart = null;
 let candleSeries = null;
+let boundsSeries = null;
 let priceLines = [];
 let curTimeframe = '1D';
 
@@ -486,6 +487,10 @@ function initPriceChart(){
     upColor:'#36d68a', downColor:'#ef5350',
     borderUpColor:'#36d68a', borderDownColor:'#ef5350',
     wickUpColor:'#36d68a', wickDownColor:'#ef5350',
+  });
+  boundsSeries = priceChart.addLineSeries({
+    color:'rgba(0,0,0,0)', lineWidth:0,
+    lastValueVisible:false, priceLineVisible:false, crosshairMarkerVisible:false,
   });
 }
 
@@ -542,6 +547,23 @@ function renderPriceChart(d){
     addLine(hi, color, pos ? 'CLUSTER▲' : 'CLUSTER▲', {style:1, axisLabel:false});
     addLine(lo, color, pos ? 'CLUSTER▼' : 'CLUSTER▼', {style:1, axisLabel:false});
   });
+
+  // Force price scale to include all level lines (King etc. often outside candle range)
+  const levelPrices = [
+    L.call_wall, L.put_wall, L.gamma_flip, sc.king_strike, d.spot,
+    ...(sc.gatekeeper_strikes || []),
+  ].filter(p => p != null && isFinite(p));
+  if(levelPrices.length && bars.length){
+    const candleHighs = bars.map(b => b.high);
+    const candleLows  = bars.map(b => b.low);
+    const maxP = Math.max(...candleHighs, ...levelPrices) * 1.01;
+    const minP = Math.min(...candleLows,  ...levelPrices) * 0.99;
+    const firstT = bars[0].time, lastT = bars[bars.length-1].time;
+    boundsSeries.setData([
+      { time: firstT, value: minP },
+      { time: lastT,  value: maxP },
+    ]);
+  }
 
   setTimeout(() => priceChart.timeScale().fitContent(), 0);
 }
@@ -842,22 +864,9 @@ window.addEventListener('resize', ()=>{
   if(curData) draw(curData);
 });
 
-// ── STATIC PREVIEW OVERRIDES ─────────────────────────────────
 checkServer = async function(){ serverOk=true; setConn('live','static preview · FMP+yfinance hybrid'); return true; };
-fetchTicker = async function(sym, force){
-  const d = BAKED_ALL[sym] || BAKED_ALL.SPY;
-  curData = d;
-  hideLoader();
-  return d;
-};
-fetchAll = async function(){
-  TICKERS.forEach(s => {
-    const d = BAKED_ALL[s];
-    if(!d) return;
-    allData[s] = {symbol:s, spot:d.spot, chg_pct:d.chg_pct, levels:d.levels, fetched_at:d.fetched_at};
-  });
-  buildMini();
-};
+fetchTicker = async function(sym, force){ const d = BAKED_ALL[sym] || BAKED_ALL.SPY; curData = d; hideLoader(); return d; };
+fetchAll = async function(){ TICKERS.forEach(s => { const d = BAKED_ALL[s]; if(!d) return; allData[s] = {symbol:s, spot:d.spot, chg_pct:d.chg_pct, levels:d.levels, fetched_at:d.fetched_at}; }); buildMini(); };
 
 init();
 </script>
