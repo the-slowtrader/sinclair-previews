@@ -371,12 +371,15 @@ function renderSidebar(d){
     (d.chg_pct>=0?'+':'') + d.chg_pct + '%  $'+(d.chg_pct>=0?'+':'')+d.chg_dollar;
 
   // Key levels sorted high → low
+  const sc = d.scenario || {};
+  const kingPos = sc.king_positive;
   const levels = [
-    {n:'Call wall',  p:L.call_wall,   c:'var(--yellow)', note:'resist'},
-    {n:'★ King',     p:L.max_pain,    c:'var(--yellow)', note:'EOW pin'},
-    {n:'Spot',       p:d.spot,        c:'var(--green)',  note:'now'},
-    {n:'Flip',       p:L.gamma_flip,  c:'var(--blue)',   note:'regime'},
-    {n:'Put wall',   p:L.put_wall,    c:'var(--purple)', note:'support'},
+    {n:'Call wall',  p:L.call_wall,     c:'var(--yellow)', note:'resist'},
+    {n:'★ King',     p:sc.king_strike,  c:kingPos===false?'var(--purple)':'var(--yellow)', note:kingPos===false?'amplifier (−GEX)':'EOW pin (+GEX)'},
+    {n:'Spot',       p:d.spot,          c:'var(--green)',  note:'now'},
+    {n:'Flip',       p:L.gamma_flip,    c:'var(--blue)',   note:'regime'},
+    {n:'Put wall',   p:L.put_wall,      c:'var(--purple)', note:'support'},
+    {n:'Max pain',   p:L.max_pain,      c:'var(--t3)',     note:'OI settle'},
   ].filter(l=>l.p!=null).sort((a,b)=>b.p-a.p);
 
   const ll = document.getElementById('lvl-list');
